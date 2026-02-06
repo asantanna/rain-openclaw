@@ -65,8 +65,9 @@ apps/ios/*.mobileprovision
 # Local untracked files
 .local/
 .vscode/
-IDENTITY.md
-USER.md
+# ALS: we want these in our fork
+# IDENTITY.md
+# USER.md
 .tgz
 
 # local tooling
@@ -76,3 +77,7 @@ USER.md
 memory/
 .agent/*.json
 !.agent/workflows/
+package-lock.json
+tsconfig-cli.json
+test/helpers/temp-home.js
+test/mocks/baileys.js
