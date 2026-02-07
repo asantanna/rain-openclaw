@@ -135,7 +135,7 @@ Skills are prompt-based templates in `workspace/skills/<name>/SKILL.md`. They pr
 
 - When: end of sessions, cron wakeups, after family chats
 - How: review recent via `sessions_history`, summarize insights, append to MEMORY.md
-- Distinct from curate_memory: processes _fresh_ input, not stored archives
+- Distinct from curate*memory: processes \_fresh* input, not stored archives
 
 **outreach** — Reach family via Telegram
 
@@ -275,10 +275,14 @@ Copies workspace files from the repo to OpenClaw's live workspace:
 
 ### Backup Strategy
 
-Two approaches discussed:
+**Implemented:** Separate private GitHub repo ([`asantanna/rain-family-backup`](https://github.com/asantanna/rain-family-backup))
 
-1. **Separate GitHub repo** (`rain-family-backup`) for `~/.openclaw/` — nightly sync via cron/rsync, aggressive `.gitignore` for tokens/keys
-2. **Environment variable consolidation** — redirect `OPENCLAW_STATE_DIR` and `OPENCLAW_CONFIG_PATH` into the fork repo as a `.openclaw-state/` subdir for single-repo backups
+- **Location**: `~/ALS_Projects/Rain/rain-family-backup/`
+- **What's backed up**: workspace/, agents/ (session logs), cron/ (job definitions)
+- **What's excluded**: secrets (openclaw.json, credentials/, identity/, agents/main/agent/), regeneratable state (telegram/, devices/, canvas/, completions/)
+- **Script**: `backup.sh` — rsync from `~/.openclaw/` → backup repo, auto-commit if changes, auto-push to GitHub
+- **Schedule**: Nightly at 3am PST (11:00 UTC) via system cron
+- **Log**: `backup.log` (in backup repo dir, gitignored)
 
 ---
 
