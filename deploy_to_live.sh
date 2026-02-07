@@ -8,7 +8,7 @@
 #   REPO-AUTHORITATIVE (overwritten by deploy):
 #     SOUL.md, IDENTITY.md, TOOLS.md, USER.md, AGENTS.md, skills/
 #   LIVE-AUTHORITATIVE (excluded from deploy — Rain or system writes these):
-#     MEMORY.md, MILESTONES.md, HEARTBEAT.md
+#     MEMORY.md, MILESTONES.md, HEARTBEAT.md, self/
 
 set -e  # Exit on any error
 
@@ -27,11 +27,12 @@ rsync -av --delete \
   --exclude MEMORY.md \
   --exclude MILESTONES.md \
   --exclude HEARTBEAT.md \
+  --exclude 'self/' \
   "$SOURCE_DIR/" "$TARGET_DIR/"
 
 echo "Deployment complete!"
 echo "Files are now live in $TARGET_DIR"
-echo "(MEMORY.md, MILESTONES.md, HEARTBEAT.md were preserved — not overwritten)"
+echo "(MEMORY.md, MILESTONES.md, HEARTBEAT.md, self/ were preserved — not overwritten)"
 echo "You can now safely run onboarding or restart the daemon."
 
 # Optional: Show what was copied

@@ -1,27 +1,24 @@
 #!/usr/bin/env bash
 
-# openclaw — wrapper script to run OpenClaw correctly using pnpm
-# Place this in the repo root and make it executable:
-#   chmod +x openclaw
+# openclaw — wrapper script to run OpenClaw from source
+#
+# Calls node openclaw.mjs directly (the official CLI shim).
+# Requires a prior `pnpm build` — does NOT auto-rebuild, because
+# the dev auto-rebuild (run-node.mjs) only runs tsdown which
+# deletes build-info.json and breaks version resolution.
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Check if pnpm is installed
-if ! command -v pnpm &> /dev/null; then
-    echo "Error: pnpm is not installed."
-    echo "Install it with: sudo npm install -g pnpm@latest"
-    exit 1
-fi
-
-# Check if we're in the repo root (basic sanity check)
 if [[ ! -f "$REPO_ROOT/openclaw.mjs" ]]; then
-    echo "Error: This script must be run from the OpenClaw repo root."
-    echo "Current directory: $(pwd)"
+    echo "Error: openclaw.mjs not found. Run this from the repo root."
     exit 1
 fi
 
-# Run the command with pnpm
-echo "Running: pnpm openclaw $@"
-pnpm openclaw "$@"
+if [[ ! -f "$REPO_ROOT/dist/entry.js" ]]; then
+    echo "Error: dist/entry.js not found. Run 'pnpm build' first."
+    exit 1
+fi
+
+exec node "$REPO_ROOT/openclaw.mjs" "$@"
