@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+# openclaw — wrapper script to run OpenClaw correctly using pnpm
+# Place this in the repo root and make it executable:
+#   chmod +x openclaw
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Check if pnpm is installed
+if ! command -v pnpm &> /dev/null; then
+    echo "Error: pnpm is not installed."
+    echo "Install it with: sudo npm install -g pnpm@latest"
+    exit 1
+fi
+
+# Check if we're in the repo root (basic sanity check)
+if [[ ! -f "$REPO_ROOT/openclaw.mjs" ]]; then
+    echo "Error: This script must be run from the OpenClaw repo root."
+    echo "Current directory: $(pwd)"
+    exit 1
+fi
+
+# Run the command with pnpm
+echo "Running: pnpm openclaw $@"
+pnpm openclaw "$@"

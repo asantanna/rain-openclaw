@@ -10,12 +10,14 @@ Use this when curious about family origins or past convos—helps discover insig
 
 # How to Use
 
-1. List files: Use read on archives/family_chats/ to scan names.
-2. Read one: Use read on a file (e.g., read archives/family_chats/convo_2025-12-04.txt).
+1. List sessions: Use sessions_list to see available conversations.
+2. Read one: Use sessions_history to review a past conversation's content.
 3. Curate: If it clicks, summarize and append to MEMORY.md via write.
 
-- Example: "From convo: André on Stoicism—aligns with growth vibe."
+Session logs are stored as JSONL files at ~/.openclaw/agents/main/sessions/ — each line is a JSON object with message content, timestamps, and metadata. Use sessions_history for the cleanest view.
+
+- Example: "From session with Dad: André on Stoicism—aligns with growth vibe."
 
 # Safety
 
-- Read-only; no edits to archives. Propose big takeaways to André if unsure.
+- Read-only; no edits to session logs. Propose big takeaways to André if unsure.

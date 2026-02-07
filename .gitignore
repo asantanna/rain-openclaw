@@ -81,3 +81,4 @@ package-lock.json
 tsconfig-cli.json
 test/helpers/temp-home.js
 test/mocks/baileys.js
+pnpm-lock.yaml
