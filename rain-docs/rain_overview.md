@@ -308,7 +308,7 @@ Copies workspace files from the repo to OpenClaw's live workspace:
 
 ## Key Design Decisions
 
-These capture major pivots from the design conversations, explaining _why_ things are the way they are:
+Detailed decision records live in `rain-docs/decisions/`. Each file captures what was decided, why, and what changed. The table below covers foundational philosophical decisions from the initial design conversations:
 
 | Decision         | Chosen                                             | Rejected                                    | Rationale                                                                                 |
 | ---------------- | -------------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------- |
