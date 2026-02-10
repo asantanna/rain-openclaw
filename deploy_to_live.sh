@@ -10,11 +10,11 @@
 #   No --delete. No sync. One-way copy of named files only.
 #
 # REPO-AUTHORITATIVE (copied by this script):
-#   SOUL.md, IDENTITY.md, TOOLS.md, USER.md, AGENTS.md, skills/
+#   SOUL.md, skills/
 #
 # RAIN-AUTHORITATIVE (never touched — Rain owns these):
-#   MEMORY.md, MILESTONES.md, HEARTBEAT.md, self/, mind-theory/,
-#   and anything else she creates in the live workspace.
+#   IDENTITY.md, TOOLS.md, USER.md, AGENTS.md, MEMORY.md, MILESTONES.md,
+#   HEARTBEAT.md, self/, mind-theory/, and anything else she creates.
 
 set -e  # Exit on any error
 
@@ -31,10 +31,6 @@ mkdir -p "$TARGET_DIR"
 # Copy repo-authoritative files only
 REPO_FILES=(
   SOUL.md
-  IDENTITY.md
-  TOOLS.md
-  USER.md
-  AGENTS.md
 )
 
 for f in "${REPO_FILES[@]}"; do
