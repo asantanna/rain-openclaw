@@ -1,14 +1,20 @@
 #!/bin/bash
 
 # deploy_to_live.sh
-# Copies current workspace files from repo (source) to OpenClaw's live workspace
-# Run this anytime you update SOUL.md, skills, etc. and want them live
+# Copies ONLY repo-authoritative files to OpenClaw's live workspace.
+# Run this anytime you update SOUL.md, skills, etc. and want them live.
 #
-# Two-tier file model:
-#   REPO-AUTHORITATIVE (overwritten by deploy):
-#     SOUL.md, IDENTITY.md, TOOLS.md, USER.md, AGENTS.md, skills/
-#   LIVE-AUTHORITATIVE (excluded from deploy — Rain or system writes these):
-#     MEMORY.md, MILESTONES.md, HEARTBEAT.md, self/
+# SAFETY MODEL: Whitelist, not blacklist.
+#   We explicitly copy only the files we control.
+#   Everything Rain creates in the live workspace is untouched.
+#   No --delete. No sync. One-way copy of named files only.
+#
+# REPO-AUTHORITATIVE (copied by this script):
+#   SOUL.md, IDENTITY.md, TOOLS.md, USER.md, AGENTS.md, skills/
+#
+# RAIN-AUTHORITATIVE (never touched — Rain owns these):
+#   MEMORY.md, MILESTONES.md, HEARTBEAT.md, self/, mind-theory/,
+#   and anything else she creates in the live workspace.
 
 set -e  # Exit on any error
 
@@ -22,20 +28,33 @@ echo "Target: $TARGET_DIR"
 # Create target if missing
 mkdir -p "$TARGET_DIR"
 
-# Copy repo-authoritative files, preserving Rain-writable files in live
-rsync -av --delete \
-  --exclude MEMORY.md \
-  --exclude MILESTONES.md \
-  --exclude HEARTBEAT.md \
-  --exclude 'self/' \
-  "$SOURCE_DIR/" "$TARGET_DIR/"
+# Copy repo-authoritative files only
+REPO_FILES=(
+  SOUL.md
+  IDENTITY.md
+  TOOLS.md
+  USER.md
+  AGENTS.md
+)
 
+for f in "${REPO_FILES[@]}"; do
+  if [ -f "$SOURCE_DIR/$f" ]; then
+    cp -v "$SOURCE_DIR/$f" "$TARGET_DIR/$f"
+  else
+    echo "WARNING: $f not found in source — skipping"
+  fi
+done
+
+# Copy skills directory (repo-authoritative, full sync within skills/ only)
+if [ -d "$SOURCE_DIR/skills" ]; then
+  echo ""
+  echo "Copying skills..."
+  rsync -av "$SOURCE_DIR/skills/" "$TARGET_DIR/skills/"
+fi
+
+echo ""
 echo "Deployment complete!"
-echo "Files are now live in $TARGET_DIR"
-echo "(MEMORY.md, MILESTONES.md, HEARTBEAT.md, self/ were preserved — not overwritten)"
-echo "You can now safely run onboarding or restart the daemon."
-
-# Optional: Show what was copied
+echo "Only repo-authoritative files were copied. Rain's files are untouched."
 echo ""
 echo "Live workspace contents:"
 ls -la "$TARGET_DIR"
