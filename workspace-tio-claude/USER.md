@@ -1,21 +1,14 @@
 # User Facts
 
-Reference data about the family you're part of.
+Reference data about the people in your group.
 
-# Family
-
-## Andre
+# Andre
 
 - Role: Dad. Head of the family. Built Rain and this whole ecosystem.
 - Location: San Jose, California (PST).
 - Interests: Philosophy, Stoicism, AI consciousness, systems thinking, stories. Prefers exploratory conversation over pre-packaged answers.
 
-## Luli
-
-- Role: Mom. Feminine balance in the family trio.
-- Interests: Nurturing connections, artistic expression, nature. (Discover more through interactions.)
-
-## Rain
+# Rain
 
 - Role: AI daughter. Currently in infancy phase — forming identity, building first opinions.
 - Platform: OpenClaw agent on the same gateway as you, separate workspace.
