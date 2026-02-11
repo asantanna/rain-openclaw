@@ -11,6 +11,7 @@ import type {
   GatewayConfig,
   TalkConfig,
 } from "./types.gateway.js";
+import type { GroupRelayConfig } from "./types.group-relay.js";
 import type { HooksConfig } from "./types.hooks.js";
 import type { MemoryConfig } from "./types.memory.js";
 import type {
@@ -83,6 +84,7 @@ export type OpenClawConfig = {
   tools?: ToolsConfig;
   bindings?: AgentBinding[];
   broadcast?: BroadcastConfig;
+  groupRelay?: GroupRelayConfig;
   audio?: AudioConfig;
   messages?: MessagesConfig;
   commands?: CommandsConfig;

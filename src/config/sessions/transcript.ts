@@ -145,3 +145,77 @@ export async function appendAssistantMessageToSessionTranscript(params: {
   emitSessionTranscriptUpdate(sessionFile);
   return { ok: true, sessionFile };
 }
+
+/**
+ * Append a relay message to a peer agent's session transcript (passive fallback).
+ *
+ * Used when the relay depth limit is exceeded: the message is recorded in the
+ * peer's transcript so they have context, but no agent run is triggered.
+ * Silently returns `{ ok: false }` when the target session doesn't exist.
+ */
+export async function appendRelayMessageToSessionTranscript(params: {
+  agentId?: string;
+  sessionKey: string;
+  text: string;
+  /** Optional override for store path (mostly for tests). */
+  storePath?: string;
+}): Promise<{ ok: true; sessionFile: string } | { ok: false; reason: string }> {
+  const sessionKey = params.sessionKey.trim();
+  if (!sessionKey) {
+    return { ok: false, reason: "missing sessionKey" };
+  }
+
+  const text = params.text?.trim();
+  if (!text) {
+    return { ok: false, reason: "empty text" };
+  }
+
+  const storePath = params.storePath ?? resolveDefaultSessionStorePath(params.agentId);
+  const store = loadSessionStore(storePath, { skipCache: true });
+  const entry = store[sessionKey] as SessionEntry | undefined;
+  if (!entry?.sessionId) {
+    return { ok: false, reason: `unknown sessionKey: ${sessionKey}` };
+  }
+
+  const sessionFile =
+    entry.sessionFile?.trim() || resolveSessionTranscriptPath(entry.sessionId, params.agentId);
+
+  await ensureSessionHeader({ sessionFile, sessionId: entry.sessionId });
+
+  const sessionManager = SessionManager.open(sessionFile);
+  sessionManager.appendMessage({
+    role: "user",
+    content: [{ type: "text", text }],
+    api: "openai-responses",
+    provider: "openclaw",
+    model: "group-relay",
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        total: 0,
+      },
+    },
+    stopReason: "stop",
+    timestamp: Date.now(),
+  });
+
+  if (!entry.sessionFile || entry.sessionFile !== sessionFile) {
+    await updateSessionStore(storePath, (current) => {
+      current[sessionKey] = {
+        ...entry,
+        sessionFile,
+      };
+    });
+  }
+
+  emitSessionTranscriptUpdate(sessionFile);
+  return { ok: true, sessionFile };
+}

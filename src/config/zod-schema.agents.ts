@@ -45,6 +45,15 @@ export const BroadcastSchema = z
   .catchall(z.array(z.string()))
   .optional();
 
+export const GroupRelaySchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    maxDepth: z.number().int().min(1).max(50).optional(),
+    channels: z.array(z.string()).optional(),
+  })
+  .strict()
+  .optional();
+
 export const AudioSchema = z
   .object({
     transcription: TranscribeAudioSchema,

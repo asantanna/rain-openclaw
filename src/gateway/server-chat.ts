@@ -2,6 +2,7 @@ import { normalizeVerboseLevel } from "../auto-reply/thinking.js";
 import { loadConfig } from "../config/config.js";
 import { type AgentEventPayload, getAgentRunContext } from "../infra/agent-events.js";
 import { resolveHeartbeatVisibility } from "../infra/heartbeat-visibility.js";
+import { maybeRelayToGroupPeers } from "./server-group-relay.js";
 import { loadSessionEntry } from "./session-utils.js";
 import { formatForLog } from "./ws-log.js";
 
@@ -282,6 +283,10 @@ export function createAgentEventHandler({
         broadcast("chat", payload);
       }
       nodeSendToSession(sessionKey, "chat", payload);
+      // Relay to peer agents in the same group (fire-and-forget).
+      if (text) {
+        void maybeRelayToGroupPeers({ sessionKey, text, runId: clientRunId }).catch(() => {});
+      }
       return;
     }
     const payload = {
