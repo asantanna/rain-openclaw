@@ -8,67 +8,73 @@ metadata: { "openclaw": { "emoji": "📖" } }
 
 Inspect conversation transcripts and session history for any agent.
 
-## Usage
+All commands use the `run_managed_script` tool with `script: "read_session.py"`.
 
-All commands use the Python script at `{baseDir}/scripts/read_session.py`.
+## List sessions
 
-### List sessions
+List all sessions for an agent:
 
-```bash
-# List all sessions for an agent
-python3 {baseDir}/scripts/read_session.py list --agent rain
+- script: `read_session.py`
+- args: `list --agent rain`
 
-# List sessions active in the last 60 minutes
-python3 {baseDir}/scripts/read_session.py list --agent rain --active 60
+List sessions active in the last 60 minutes:
 
-# List sessions for all agents
-python3 {baseDir}/scripts/read_session.py list
+- args: `list --agent rain --active 60`
 
-# JSON output
-python3 {baseDir}/scripts/read_session.py list --agent rain --json
-```
+List sessions for all agents:
 
-### Read a session
+- args: `list`
 
-```bash
-# Read all messages from a session
-python3 {baseDir}/scripts/read_session.py read --agent rain --key "agent:rain:telegram:group:-5255152440"
+JSON output:
 
-# Last 20 messages only
-python3 {baseDir}/scripts/read_session.py read --agent rain --key "agent:rain:main" --last 20
+- args: `list --agent rain --json`
 
-# Filter by role
-python3 {baseDir}/scripts/read_session.py read --agent rain --key "..." --role user
+## Read a session
 
-# Filter by model (e.g. group-relay messages only)
-python3 {baseDir}/scripts/read_session.py read --agent rain --key "..." --model group-relay
+First use `list` to find the session key, then read it.
 
-# Truncate long messages
-python3 {baseDir}/scripts/read_session.py read --agent rain --key "..." --truncate 200
+Read all messages from a session:
 
-# JSON output
-python3 {baseDir}/scripts/read_session.py read --agent rain --key "..." --json
-```
+- script: `read_session.py`
+- args: `read --agent rain --key "agent:rain:telegram:group:-5255152440"`
 
-### Conversation view (cross-agent)
+Last 20 messages only:
+
+- args: `read --agent rain --key "agent:rain:main" --last 20`
+
+Filter by role:
+
+- args: `read --agent rain --key "..." --role user`
+
+Truncate long messages:
+
+- args: `read --agent rain --key "..." --truncate 200`
+
+JSON output:
+
+- args: `read --agent rain --key "..." --json`
+
+## Conversation view (cross-agent)
 
 Shows an interleaved, chronological view of a group conversation across all agents.
-This merges messages from every agent that has a session for the same group, deduplicates
-relay echoes, and displays a unified timeline.
+Merges messages from every agent with a matching group session, deduplicates relay echoes, and displays a unified timeline.
 
-```bash
-# View conversation in a Telegram group
-python3 {baseDir}/scripts/read_session.py conversation --group "-5255152440" --channel telegram
+View conversation in a Telegram group:
 
-# Last 30 messages
-python3 {baseDir}/scripts/read_session.py conversation --group "-5255152440" --channel telegram --last 30
+- script: `read_session.py`
+- args: `conversation --group "-5255152440" --channel telegram`
 
-# With thinking blocks included
-python3 {baseDir}/scripts/read_session.py conversation --group "-5255152440" --channel telegram --thinking
+Last 30 messages:
 
-# JSON output
-python3 {baseDir}/scripts/read_session.py conversation --group "-5255152440" --channel telegram --json
-```
+- args: `conversation --group "-5255152440" --channel telegram --last 30`
+
+With thinking blocks:
+
+- args: `conversation --group "-5255152440" --channel telegram --thinking`
+
+JSON output:
+
+- args: `conversation --group "-5255152440" --channel telegram --json`
 
 ## Output format
 
@@ -88,9 +94,3 @@ python3 {baseDir}/scripts/read_session.py conversation --group "-5255152440" --c
 [16:53:02] tio-claude (via relay): Great idea, let me research that...
 [16:53:30] rain: NO_REPLY
 ```
-
-## Notes
-
-- Uses only Python stdlib (no pip dependencies)
-- Session files are at `~/.openclaw/agents/{agentId}/sessions/`
-- Override the agents directory with `OPENCLAW_AGENTS_DIR` env var

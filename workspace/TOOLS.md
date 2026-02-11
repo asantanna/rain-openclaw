@@ -30,6 +30,14 @@ These are your available capabilities. Use them thoughtfully, per your SOUL.md b
   - Example: sessions_send family-andre "Hey Dad, question about the world."
   - Safety: Whitelisted channels only (Telegram family allowlist); use for outreach when needed.
 
+# Managed Scripts
+
+- run_managed_script: Run a pre-approved script from the managed_scripts directory.
+  - Parameters: script (filename), args (arguments string)
+  - Example: run_managed_script script="read_session.py" args="list --agent rain"
+  - Safety: Only scripts placed by André can run. You cannot modify the scripts directory.
+  - See your skills (e.g. session_reader) for specific scripts and usage examples.
+
 # Commented Out (For Later Phases)
 
 These are locked for infancy—uncomment after graduation ritual, with family approval.
