@@ -16,6 +16,7 @@ import type { MsgContext } from "../auto-reply/templating.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { resolveAgentConfig } from "../agents/agent-scope.js";
 import { dispatchInboundMessageWithDispatcher } from "../auto-reply/dispatch.js";
+import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import { loadConfig } from "../config/config.js";
 import { appendRelayMessageToSessionTranscript } from "../config/sessions/transcript.js";
 import { listBindings } from "../routing/bindings.js";
@@ -152,7 +153,8 @@ export async function maybeRelayToGroupPeers(params: {
   const allowedChannels = cfg.groupRelay?.channels;
 
   const { sessionKey, text, runId } = params;
-  if (!text.trim()) {
+  const trimmed = text.trim();
+  if (!trimmed || isSilentReplyText(trimmed) || SILENT_REPLY_TOKEN.startsWith(trimmed)) {
     return;
   }
 
