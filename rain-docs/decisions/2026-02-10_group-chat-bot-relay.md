@@ -1,7 +1,7 @@
 # Decision: Group Chat Bot-to-Bot Relay
 
 **Date:** 2026-02-10
-**Status:** Future enhancement (parked)
+**Status:** Implemented (commit 256961da9)
 
 ## Context
 
@@ -25,6 +25,6 @@ OpenClaw has `tools.agentToAgent` config (disabled by default) with a ping-pong 
 
 This is a supervised play date. Andre must see every message. Whatever solution we build must keep Telegram as the visible surface where all messages appear.
 
-## Status
+## Outcome
 
-Needs discussion before implementation. The right approach hasn't been decided yet.
+Implemented gateway-level relay (approach #1). When an agent posts in a group, the gateway injects a synthetic `group-relay` user message into every other agent's session for that group. Messages are prefixed with `[agent-name]:` for attribution. Relay depth is capped (`maxDepth: 50`) and relay messages are tagged to prevent echo loops.
