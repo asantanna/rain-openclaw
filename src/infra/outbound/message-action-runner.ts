@@ -1,4 +1,5 @@
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
+import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
@@ -18,6 +19,7 @@ import {
 } from "../../agents/tools/common.js";
 import { parseReplyDirectives } from "../../auto-reply/reply/reply-directives.js";
 import { dispatchChannelMessageAction } from "../../channels/plugins/message-actions.js";
+import { maybeRelayToGroupPeers } from "../../gateway/server-group-relay.js";
 import { extensionForMime } from "../../media/mime.js";
 import { parseSlackTarget } from "../../slack/targets.js";
 import { parseTelegramTarget } from "../../telegram/targets.js";
@@ -886,6 +888,16 @@ async function handleSendAction(ctx: ResolvedActionContext): Promise<MessageActi
     gifPlayback,
     bestEffort: bestEffort ?? undefined,
   });
+
+  // After successful send, relay to peer agents in group chats.
+  // maybeRelayToGroupPeers handles all validation (relay enabled, group session, peers).
+  if (!dryRun && outboundRoute?.sessionKey && message) {
+    void maybeRelayToGroupPeers({
+      sessionKey: outboundRoute.sessionKey,
+      text: message,
+      runId: `msg-tool-${crypto.randomUUID()}`,
+    }).catch(() => {});
+  }
 
   return {
     kind: "send",

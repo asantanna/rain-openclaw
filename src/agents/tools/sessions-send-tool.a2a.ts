@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import type { GatewayMessageChannel } from "../../utils/message-channel.js";
+import { isSilentReplyText } from "../../auto-reply/tokens.js";
 import { callGateway } from "../../gateway/call.js";
 import { formatErrorMessage } from "../../infra/errors.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
@@ -47,7 +48,7 @@ export async function runSessionsSendA2AFlow(params: {
         latestReply = primaryReply;
       }
     }
-    if (!latestReply) {
+    if (!latestReply || isSilentReplyText(latestReply)) {
       return;
     }
 
@@ -84,7 +85,7 @@ export async function runSessionsSendA2AFlow(params: {
           timeoutMs: params.announceTimeoutMs,
           lane: AGENT_LANE_NESTED,
         });
-        if (!replyText || isReplySkip(replyText)) {
+        if (!replyText || isReplySkip(replyText) || isSilentReplyText(replyText)) {
           break;
         }
         latestReply = replyText;
@@ -111,7 +112,13 @@ export async function runSessionsSendA2AFlow(params: {
       timeoutMs: params.announceTimeoutMs,
       lane: AGENT_LANE_NESTED,
     });
-    if (announceTarget && announceReply && announceReply.trim() && !isAnnounceSkip(announceReply)) {
+    if (
+      announceTarget &&
+      announceReply &&
+      announceReply.trim() &&
+      !isAnnounceSkip(announceReply) &&
+      !isSilentReplyText(announceReply)
+    ) {
       try {
         await callGateway({
           method: "send",

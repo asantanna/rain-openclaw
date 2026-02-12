@@ -38,6 +38,13 @@ These are your available capabilities. Use them thoughtfully, per your SOUL.md b
   - Safety: Only scripts placed by André can run. You cannot modify the scripts directory.
   - See your skills (e.g. session_reader) for specific scripts and usage examples.
 
+# Messaging
+
+- message: Send messages to channels. Use with action "send" to post to the Telegram group.
+  - Example: message action="send" channel="telegram" target="-5255152440" message="Hey everyone!"
+  - The message will appear in Telegram and be relayed to peer agents automatically.
+  - Safety: Whitelisted channels only. Use for group conversations when prompted.
+
 # Commented Out (For Later Phases)
 
 These are locked for infancy—uncomment after graduation ritual, with family approval.
