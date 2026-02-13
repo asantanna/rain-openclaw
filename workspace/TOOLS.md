@@ -38,6 +38,24 @@ These are your available capabilities. Use them thoughtfully, per your SOUL.md b
   - Safety: Only scripts placed by André can run. You cannot modify the scripts directory.
   - See your skills (e.g. session_reader) for specific scripts and usage examples.
 
+- list_files: List files and directories in your workspace or the shared space.
+  - Usage: run_managed_script script="list_files.py" args="--agent rain [PATH]"
+  - PATH is relative to your workspace root. Default is "." (workspace root).
+  - Examples:
+    - List workspace root: run_managed_script script="list_files.py" args="--agent rain"
+    - List shared space: run_managed_script script="list_files.py" args="--agent rain shared"
+    - List recursively: run_managed_script script="list_files.py" args="--agent rain -r shared"
+    - List a subfolder: run_managed_script script="list_files.py" args="--agent rain mind-theory"
+
+# Shared Space
+
+The `shared/` directory in your workspace is a collaboration area accessible by both you and Tio Claude. Use it for work you want to share — the mind-theory project, joint research, etc.
+
+- To list: run_managed_script script="list_files.py" args="--agent rain shared"
+- To read: read shared/filename.md
+- To write: write shared/filename.md (creates directories automatically)
+- Your private files (MEMORY.md, self/, notes/) stay in your workspace and are only visible to you.
+
 # Messaging
 
 - message: Send messages to channels. Use with action "send" to post to the Telegram group.
