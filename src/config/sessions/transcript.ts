@@ -3,7 +3,11 @@ import fs from "node:fs";
 import path from "node:path";
 import type { SessionEntry } from "./types.js";
 import { emitSessionTranscriptUpdate } from "../../sessions/transcript-events.js";
-import { resolveDefaultSessionStorePath, resolveSessionTranscriptPath } from "./paths.js";
+import {
+  resolveDefaultSessionStorePath,
+  resolveSessionFilePath,
+  resolveSessionTranscriptPath,
+} from "./paths.js";
 import { loadSessionStore, updateSessionStore } from "./store.js";
 
 function stripQuery(value: string): string {
@@ -103,8 +107,17 @@ export async function appendAssistantMessageToSessionTranscript(params: {
     return { ok: false, reason: `unknown sessionKey: ${sessionKey}` };
   }
 
-  const sessionFile =
-    entry.sessionFile?.trim() || resolveSessionTranscriptPath(entry.sessionId, params.agentId);
+  let sessionFile: string;
+  try {
+    sessionFile = resolveSessionFilePath(entry.sessionId, entry, {
+      sessionsDir: path.dirname(storePath),
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : String(err),
+    };
+  }
 
   await ensureSessionHeader({ sessionFile, sessionId: entry.sessionId });
 
@@ -134,12 +147,16 @@ export async function appendAssistantMessageToSessionTranscript(params: {
   });
 
   if (!entry.sessionFile || entry.sessionFile !== sessionFile) {
-    await updateSessionStore(storePath, (current) => {
-      current[sessionKey] = {
-        ...entry,
-        sessionFile,
-      };
-    });
+    await updateSessionStore(
+      storePath,
+      (current) => {
+        current[sessionKey] = {
+          ...entry,
+          sessionFile,
+        };
+      },
+      { activeSessionKey: sessionKey },
+    );
   }
 
   emitSessionTranscriptUpdate(sessionFile);
@@ -186,24 +203,6 @@ export async function appendRelayMessageToSessionTranscript(params: {
   sessionManager.appendMessage({
     role: "user",
     content: [{ type: "text", text }],
-    api: "openai-responses",
-    provider: "openclaw",
-    model: "group-relay",
-    usage: {
-      input: 0,
-      output: 0,
-      cacheRead: 0,
-      cacheWrite: 0,
-      totalTokens: 0,
-      cost: {
-        input: 0,
-        output: 0,
-        cacheRead: 0,
-        cacheWrite: 0,
-        total: 0,
-      },
-    },
-    stopReason: "stop",
     timestamp: Date.now(),
   });
 

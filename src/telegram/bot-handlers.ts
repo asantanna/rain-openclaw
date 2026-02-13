@@ -163,7 +163,7 @@ export const registerTelegramHandlers = ({
       channel: "telegram",
       accountId,
       peer: {
-        kind: params.isGroup ? "group" : "dm",
+        kind: params.isGroup ? "group" : "direct",
         id: peerId,
       },
       parentPeer,
@@ -363,7 +363,13 @@ export const registerTelegramHandlers = ({
           }
         }
         const defaultGroupPolicy = cfg.channels?.defaults?.groupPolicy;
-        const groupPolicy = telegramCfg.groupPolicy ?? defaultGroupPolicy ?? "open";
+        const groupPolicy = firstDefined(
+          topicConfig?.groupPolicy,
+          groupConfig?.groupPolicy,
+          telegramCfg.groupPolicy,
+          defaultGroupPolicy,
+          "open",
+        );
         if (groupPolicy === "disabled") {
           logVerbose(`Blocked telegram group message (groupPolicy: disabled)`);
           return;
@@ -498,7 +504,16 @@ export const registerTelegramHandlers = ({
             );
           } catch (editErr) {
             const errStr = String(editErr);
-            if (!errStr.includes("message is not modified")) {
+            if (errStr.includes("no text in the message")) {
+              try {
+                await bot.api.deleteMessage(callbackMessage.chat.id, callbackMessage.message_id);
+              } catch {}
+              await bot.api.sendMessage(
+                callbackMessage.chat.id,
+                text,
+                keyboard ? { reply_markup: keyboard } : undefined,
+              );
+            } else if (!errStr.includes("message is not modified")) {
               throw editErr;
             }
           }
@@ -719,7 +734,13 @@ export const registerTelegramHandlers = ({
         // - "disabled": block all group messages entirely
         // - "allowlist": only allow group messages from senders in groupAllowFrom/allowFrom
         const defaultGroupPolicy = cfg.channels?.defaults?.groupPolicy;
-        const groupPolicy = telegramCfg.groupPolicy ?? defaultGroupPolicy ?? "open";
+        const groupPolicy = firstDefined(
+          topicConfig?.groupPolicy,
+          groupConfig?.groupPolicy,
+          telegramCfg.groupPolicy,
+          defaultGroupPolicy,
+          "open",
+        );
         if (groupPolicy === "disabled") {
           logVerbose(`Blocked telegram group message (groupPolicy: disabled)`);
           return;

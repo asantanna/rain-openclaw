@@ -30,6 +30,7 @@ import {
   type GatewayClientName,
 } from "../../utils/message-channel.js";
 import { loadWebMedia } from "../../web/media.js";
+import { throwIfAborted } from "./abort.js";
 import {
   listConfiguredMessageChannels,
   resolveMessageChannelSelection,
@@ -281,12 +282,8 @@ function resolveAttachmentMaxBytes(params: {
   channel: ChannelId;
   accountId?: string | null;
 }): number | undefined {
-  const fallback = params.cfg.agents?.defaults?.mediaMaxMb;
-  if (params.channel !== "bluebubbles") {
-    return typeof fallback === "number" ? fallback * 1024 * 1024 : undefined;
-  }
   const accountId = typeof params.accountId === "string" ? params.accountId.trim() : "";
-  const channelCfg = params.cfg.channels?.bluebubbles;
+  const channelCfg = params.cfg.channels?.[params.channel];
   const channelObj =
     channelCfg && typeof channelCfg === "object"
       ? (channelCfg as Record<string, unknown>)
@@ -302,6 +299,7 @@ function resolveAttachmentMaxBytes(params: {
     accountCfg && typeof accountCfg === "object"
       ? (accountCfg as Record<string, unknown>).mediaMaxMb
       : undefined;
+  // Priority: account-specific > channel-level > global default
   const limitMb =
     (typeof accountMediaMax === "number" ? accountMediaMax : undefined) ??
     channelMediaMax ??
@@ -447,7 +445,8 @@ async function hydrateSetGroupIconParams(params: {
       channel: params.channel,
       accountId: params.accountId,
     });
-    const media = await loadWebMedia(mediaSource, maxBytes);
+    // localRoots: "any" — media paths are already validated by normalizeSandboxMediaList above.
+    const media = await loadWebMedia(mediaSource, maxBytes, { localRoots: "any" });
     params.args.buffer = media.buffer.toString("base64");
     if (!contentTypeParam && media.contentType) {
       params.args.contentType = media.contentType;
@@ -511,7 +510,8 @@ async function hydrateSendAttachmentParams(params: {
       channel: params.channel,
       accountId: params.accountId,
     });
-    const media = await loadWebMedia(mediaSource, maxBytes);
+    // localRoots: "any" — media paths are already validated by normalizeSandboxMediaList above.
+    const media = await loadWebMedia(mediaSource, maxBytes, { localRoots: "any" });
     params.args.buffer = media.buffer.toString("base64");
     if (!contentTypeParam && media.contentType) {
       params.args.contentType = media.contentType;
@@ -725,14 +725,6 @@ async function handleBroadcastAction(
   };
 }
 
-function throwIfAborted(abortSignal?: AbortSignal): void {
-  if (abortSignal?.aborted) {
-    const err = new Error("Message send aborted");
-    err.name = "AbortError";
-    throw err;
-  }
-}
-
 async function handleSendAction(ctx: ResolvedActionContext): Promise<MessageActionRunResult> {
   const {
     cfg,
@@ -755,6 +747,7 @@ async function handleSendAction(ctx: ResolvedActionContext): Promise<MessageActi
     readStringParam(params, "path", { trim: false }) ??
     readStringParam(params, "filePath", { trim: false });
   const hasCard = params.card != null && typeof params.card === "object";
+  const caption = readStringParam(params, "caption", { allowEmpty: true }) ?? "";
   let message =
     readStringParam(params, "message", {
       required: !mediaHint && !hasCard,
@@ -762,6 +755,9 @@ async function handleSendAction(ctx: ResolvedActionContext): Promise<MessageActi
     }) ?? "";
   if (message.includes("\\n")) {
     message = message.replaceAll("\\n", "\n");
+  }
+  if (!message.trim() && caption.trim()) {
+    message = caption;
   }
 
   const parsed = parseReplyDirectives(message);
@@ -814,6 +810,16 @@ async function handleSendAction(ctx: ResolvedActionContext): Promise<MessageActi
   });
 
   const mediaUrl = readStringParam(params, "media", { trim: false });
+  if (channel === "whatsapp") {
+    message = message.replace(/^(?:[ \t]*\r?\n)+/, "");
+    if (!message.trim()) {
+      message = "";
+    }
+  }
+  if (!message.trim() && !mediaUrl && mergedMediaUrls.length === 0 && !hasCard) {
+    throw new Error("send requires text or media");
+  }
+  params.message = message;
   const gifPlayback = readBooleanParam(params, "gifPlayback") ?? false;
   const bestEffort = readBooleanParam(params, "bestEffort");
 
@@ -887,6 +893,8 @@ async function handleSendAction(ctx: ResolvedActionContext): Promise<MessageActi
     mediaUrls: mergedMediaUrls.length ? mergedMediaUrls : undefined,
     gifPlayback,
     bestEffort: bestEffort ?? undefined,
+    replyToId: replyToId ?? undefined,
+    threadId: resolvedThreadId ?? undefined,
   });
 
   // After successful send, relay to peer agents in group chats.
