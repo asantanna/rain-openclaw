@@ -86,7 +86,18 @@ export function handleMessageUpdate(
     chunk = delta;
   } else if (evtType === "text_start" || evtType === "text_end") {
     if (delta) {
-      chunk = delta;
+      // Apply monotonic dedup on text_end — some providers send full accumulated text as delta
+      if (evtType === "text_end" && ctx.state.deltaBuffer) {
+        if (delta.startsWith(ctx.state.deltaBuffer)) {
+          chunk = delta.slice(ctx.state.deltaBuffer.length);
+        } else if (ctx.state.deltaBuffer.startsWith(delta)) {
+          chunk = "";
+        } else {
+          chunk = delta;
+        }
+      } else {
+        chunk = delta;
+      }
     } else if (content) {
       // KNOWN: Some providers resend full content on `text_end`.
       // We only append a suffix (or nothing) to keep output monotonic.

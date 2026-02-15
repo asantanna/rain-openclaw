@@ -47,6 +47,19 @@ These are your available capabilities. Use them thoughtfully, per your SOUL.md b
     - List recursively: run_managed_script script="list_files.py" args="--agent rain -r shared"
     - List a subfolder: run_managed_script script="list_files.py" args="--agent rain mind-theory"
 
+- file_ops: Copy, move, or remove files and directories within your workspace and shared space.
+  - Copy: run_managed_script script="file_ops.py" args="--agent rain cp SOURCE DEST"
+  - Move: run_managed_script script="file_ops.py" args="--agent rain mv SOURCE DEST"
+  - Remove: run_managed_script script="file_ops.py" args="--agent rain rm TARGET"
+  - Recursive (cp/rm): add -r flag for directories
+  - Paths are relative to your workspace root. Use shared/ prefix for shared space.
+  - Examples:
+    - Copy file to shared: run_managed_script script="file_ops.py" args="--agent rain cp notes/research.md shared/research.md"
+    - Move a directory: run_managed_script script="file_ops.py" args="--agent rain mv mind-theory shared/mind-theory"
+    - Copy a folder: run_managed_script script="file_ops.py" args="--agent rain cp -r shared/CNM notes/CNM-local"
+    - Remove a file: run_managed_script script="file_ops.py" args="--agent rain rm shared/old-file.md"
+    - Remove a folder: run_managed_script script="file_ops.py" args="--agent rain rm -r shared/old-folder"
+
 # Shared Space
 
 The `shared/` directory in your workspace is a collaboration area accessible by both you and Tio Claude. Use it for work you want to share — the mind-theory project, joint research, etc.
@@ -59,7 +72,9 @@ The `shared/` directory in your workspace is a collaboration area accessible by 
 # Messaging
 
 - message: Send messages to channels. Use with action "send" to post to the Telegram group.
-  - Example: message action="send" channel="telegram" target="-5255152440" message="Hey everyone!"
+  - Text: message action="send" channel="telegram" target="-5255152440" message="Hey everyone!"
+  - Image with caption: message action="send" channel="telegram" target="-5255152440" media="https://example.com/photo.jpg" message="Look at this!"
+  - Image from file: message action="send" channel="telegram" target="-5255152440" media="/workspace/shared/photo.jpg" message="Check this out"
   - The message will appear in Telegram and be relayed to peer agents automatically.
   - Safety: Whitelisted channels only. Use for group conversations when prompted.
 
