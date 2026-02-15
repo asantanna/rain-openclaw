@@ -39,7 +39,9 @@ function resolveInterpreter(scriptPath: string): string | undefined {
 }
 
 function truncate(text: string, max: number): string {
-  if (text.length <= max) return text;
+  if (text.length <= max) {
+    return text;
+  }
   return text.slice(0, max) + `\n... (truncated at ${max} bytes)`;
 }
 

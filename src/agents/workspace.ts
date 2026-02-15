@@ -29,6 +29,9 @@ export const DEFAULT_HEARTBEAT_FILENAME = "HEARTBEAT.md";
 export const DEFAULT_BOOTSTRAP_FILENAME = "BOOTSTRAP.md";
 export const DEFAULT_MEMORY_FILENAME = "MEMORY.md";
 export const DEFAULT_MEMORY_ALT_FILENAME = "memory.md";
+export const DEFAULT_MILESTONES_FILENAME = "MILESTONES.md";
+export const DEFAULT_SELF_INDEX_FILENAME = "self/INDEX.md";
+export const DEFAULT_SELF_SCRATCHPAD_FILENAME = "self/scratchpad.md";
 
 const workspaceTemplateCache = new Map<string, Promise<string>>();
 let gitAvailabilityPromise: Promise<boolean> | null = null;
@@ -84,7 +87,10 @@ export type WorkspaceBootstrapFileName =
   | typeof DEFAULT_HEARTBEAT_FILENAME
   | typeof DEFAULT_BOOTSTRAP_FILENAME
   | typeof DEFAULT_MEMORY_FILENAME
-  | typeof DEFAULT_MEMORY_ALT_FILENAME;
+  | typeof DEFAULT_MEMORY_ALT_FILENAME
+  | typeof DEFAULT_MILESTONES_FILENAME
+  | typeof DEFAULT_SELF_INDEX_FILENAME
+  | typeof DEFAULT_SELF_SCRATCHPAD_FILENAME;
 
 export type WorkspaceBootstrapFile = {
   name: WorkspaceBootstrapFileName;
@@ -296,6 +302,18 @@ export async function loadWorkspaceBootstrapFiles(dir: string): Promise<Workspac
     {
       name: DEFAULT_BOOTSTRAP_FILENAME,
       filePath: path.join(resolvedDir, DEFAULT_BOOTSTRAP_FILENAME),
+    },
+    {
+      name: DEFAULT_MILESTONES_FILENAME,
+      filePath: path.join(resolvedDir, DEFAULT_MILESTONES_FILENAME),
+    },
+    {
+      name: DEFAULT_SELF_INDEX_FILENAME,
+      filePath: path.join(resolvedDir, DEFAULT_SELF_INDEX_FILENAME),
+    },
+    {
+      name: DEFAULT_SELF_SCRATCHPAD_FILENAME,
+      filePath: path.join(resolvedDir, DEFAULT_SELF_SCRATCHPAD_FILENAME),
     },
   ];
 
