@@ -899,10 +899,11 @@ async function handleSendAction(ctx: ResolvedActionContext): Promise<MessageActi
 
   // After successful send, relay to peer agents in group chats.
   // maybeRelayToGroupPeers handles all validation (relay enabled, group session, peers).
-  if (!dryRun && outboundRoute?.sessionKey && message) {
+  if (!dryRun && outboundRoute?.sessionKey && (message || mirrorMediaUrls?.length)) {
     void maybeRelayToGroupPeers({
       sessionKey: outboundRoute.sessionKey,
-      text: message,
+      text: message ?? "",
+      mediaUrls: mirrorMediaUrls,
       runId: `msg-tool-${crypto.randomUUID()}`,
     }).catch(() => {});
   }

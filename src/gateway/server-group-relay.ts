@@ -19,6 +19,8 @@ import { dispatchInboundMessageWithDispatcher } from "../auto-reply/dispatch.js"
 import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import { loadConfig } from "../config/config.js";
 import { appendRelayMessageToSessionTranscript } from "../config/sessions/transcript.js";
+import { logVerbose } from "../globals.js";
+import { saveMediaSource } from "../media/store.js";
 import { listBindings } from "../routing/bindings.js";
 import { normalizeAgentId, buildAgentPeerSessionKey } from "../routing/session-key.js";
 import { parseAgentSessionKey } from "../sessions/session-key-utils.js";
@@ -142,6 +144,7 @@ function resolveAgentDisplayName(cfg: OpenClawConfig, agentId: string): string {
 export async function maybeRelayToGroupPeers(params: {
   sessionKey: string;
   text: string;
+  mediaUrls?: string[];
   runId: string;
 }): Promise<void> {
   const cfg = loadConfig();
@@ -154,7 +157,11 @@ export async function maybeRelayToGroupPeers(params: {
 
   const { sessionKey, text, runId } = params;
   const trimmed = text.trim();
-  if (!trimmed || isSilentReplyText(trimmed) || SILENT_REPLY_TOKEN.startsWith(trimmed)) {
+  const hasMedia = Boolean(params.mediaUrls && params.mediaUrls.length > 0);
+  if (!trimmed && !hasMedia) {
+    return;
+  }
+  if (trimmed && (isSilentReplyText(trimmed) || SILENT_REPLY_TOKEN.startsWith(trimmed))) {
     return;
   }
 
@@ -199,6 +206,31 @@ export async function maybeRelayToGroupPeers(params: {
   const senderName = resolveAgentDisplayName(cfg, sourceAgentId);
   const attributedText = `[${senderName}]: ${text}`;
 
+  // Download media URLs to local files so the vision pipeline can process them.
+  // buildInboundMediaNote() requires MediaPath to generate [media attached: ...] text,
+  // and detectImageReferences() uses that to create vision blocks for the model.
+  let mediaPaths: string[] | undefined;
+  let mediaTypes: string[] | undefined;
+  if (hasMedia && params.mediaUrls) {
+    const results = await Promise.allSettled(
+      params.mediaUrls.map((url) => saveMediaSource(url, undefined, "relay")),
+    );
+    const paths: string[] = [];
+    const types: string[] = [];
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        paths.push(result.value.path);
+        types.push(result.value.contentType ?? "");
+      } else {
+        logVerbose(`relay: failed to download media: ${String(result.reason)}`);
+      }
+    }
+    if (paths.length > 0) {
+      mediaPaths = paths;
+      mediaTypes = types;
+    }
+  }
+
   for (const peer of peers) {
     const peerSessionKey = buildAgentPeerSessionKey({
       agentId: peer.agentId,
@@ -235,6 +267,12 @@ export async function maybeRelayToGroupPeers(params: {
       CommandAuthorized: false,
       MessageSid: relayRunId,
       SenderName: senderName,
+      MediaUrl: params.mediaUrls?.[0],
+      MediaUrls: params.mediaUrls,
+      MediaPath: mediaPaths?.[0],
+      MediaPaths: mediaPaths,
+      MediaType: mediaTypes?.[0],
+      MediaTypes: mediaTypes,
     };
 
     dispatchInboundMessageWithDispatcher({

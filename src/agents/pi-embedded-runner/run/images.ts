@@ -1,4 +1,5 @@
 import type { ImageContent } from "@mariozechner/pi-ai";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SandboxFsBridge } from "../../sandbox/fs-bridge.js";
@@ -208,9 +209,19 @@ export async function loadImageFromRef(
     }
 
     // loadWebMedia handles local file paths (including file:// URLs)
+    // For sandbox: the default localRoots don't include the workspace directory
+    // (e.g., ~/.openclaw/workspace/) which is used for rw sandbox workspaces.
+    // Include the sandbox root as an additional allowed directory so the
+    // assertLocalMediaAllowed check still validates the path (defense-in-depth).
     const media = options?.sandbox
       ? await loadWebMedia(targetPath, {
           maxBytes: options.maxBytes,
+          localRoots: [
+            os.tmpdir(),
+            path.join(os.homedir(), ".openclaw", "media"),
+            path.join(os.homedir(), ".openclaw", "agents"),
+            options.sandbox.root,
+          ],
           readFile: (filePath) =>
             options.sandbox!.bridge.readFile({ filePath, cwd: options.sandbox!.root }),
         })

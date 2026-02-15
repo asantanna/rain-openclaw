@@ -790,6 +790,10 @@ export async function runEmbeddedAttempt(
           // This eliminates the need for an explicit "view" tool call by injecting
           // images directly into the prompt when the model supports it.
           // Also scans conversation history to enable follow-up questions about earlier images.
+          const sandboxForImages =
+            sandbox?.enabled && sandbox?.fsBridge
+              ? { root: sandbox.workspaceDir, bridge: sandbox.fsBridge }
+              : undefined;
           const imageResult = await detectAndLoadPromptImages({
             prompt: effectivePrompt,
             workspaceDir: effectiveWorkspace,
@@ -798,10 +802,7 @@ export async function runEmbeddedAttempt(
             historyMessages: activeSession.messages,
             maxBytes: MAX_IMAGE_BYTES,
             // Enforce sandbox path restrictions when sandbox is enabled
-            sandbox:
-              sandbox?.enabled && sandbox?.fsBridge
-                ? { root: sandbox.workspaceDir, bridge: sandbox.fsBridge }
-                : undefined,
+            sandbox: sandboxForImages,
           });
 
           // Inject history images into their original message positions.
