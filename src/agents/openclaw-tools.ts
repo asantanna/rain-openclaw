@@ -13,6 +13,7 @@ import { createImageTool } from "./tools/image-tool.js";
 import { createMessageTool } from "./tools/message-tool.js";
 import { createNodesTool } from "./tools/nodes-tool.js";
 import { createRunManagedScriptTool } from "./tools/run-managed-script-tool.js";
+import { createSessionCompactTool } from "./tools/session-compact-tool.js";
 import { createSessionStatusTool } from "./tools/session-status-tool.js";
 import { createSessionsHistoryTool } from "./tools/sessions-history-tool.js";
 import { createSessionsListTool } from "./tools/sessions-list-tool.js";
@@ -146,6 +147,10 @@ export function createOpenClawTools(options?: {
       requesterAgentIdOverride: options?.requesterAgentIdOverride,
     }),
     createSessionStatusTool({
+      agentSessionKey: options?.agentSessionKey,
+      config: options?.config,
+    }),
+    createSessionCompactTool({
       agentSessionKey: options?.agentSessionKey,
       config: options?.config,
     }),

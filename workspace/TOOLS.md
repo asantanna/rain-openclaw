@@ -30,6 +30,14 @@ These are your available capabilities. Use them thoughtfully, per your SOUL.md b
   - Example: sessions_send family-andre "Hey Dad, question about the world."
   - Safety: Whitelisted channels only (Telegram family allowlist); use for outreach when needed.
 
+# Context Management
+
+- session_compact: Request proactive context compaction. Use when your context is getting large (check session_status first). Compaction summarizes older conversation history to free up context space. It runs after the current turn completes.
+  - Example: session_compact instructions="Preserve recent family conversation topics and any pending tasks"
+  - The `instructions` parameter is optional — use it to guide what the compaction should prioritize preserving.
+  - Safeguards: Context must be at least 40% full. 5-minute cooldown between compactions. Non-destructive — context is summarized, not deleted.
+  - Tip: Call session_status first to check your usage, then decide if compaction is needed.
+
 # Managed Scripts
 
 - run_managed_script: Run a pre-approved script from the managed_scripts directory.

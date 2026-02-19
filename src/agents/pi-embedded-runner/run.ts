@@ -44,6 +44,10 @@ import {
   pickFallbackThinkingLevel,
   type FailoverReason,
 } from "../pi-embedded-helpers.js";
+import {
+  consumePendingCompactRequest,
+  markCompactionCompleted,
+} from "../tools/session-compact-tool.js";
 import { derivePromptTokens, normalizeUsage, type UsageLike } from "../usage.js";
 import { redactRunIdentifier, resolveRunWorkspaceDir } from "../workspace-run.js";
 import { compactEmbeddedPiSessionDirect } from "./compact.js";
@@ -820,6 +824,52 @@ export async function runEmbeddedPiAgent(
                 profileId: lastProfileId,
                 status,
               });
+            }
+          }
+
+          // --- Deferred session_compact tool ---
+          const compactSessionKey = params.sessionKey ?? params.sessionId;
+          const deferredCompact = consumePendingCompactRequest(compactSessionKey);
+          if (deferredCompact && !aborted) {
+            log.info(
+              `deferred session_compact: sessionKey=${redactedSessionKey} provider=${provider}/${modelId}`,
+            );
+            try {
+              const compactResult = await compactEmbeddedPiSessionDirect({
+                sessionId: params.sessionId,
+                sessionKey: params.sessionKey,
+                messageChannel: params.messageChannel,
+                messageProvider: params.messageProvider,
+                agentAccountId: params.agentAccountId,
+                authProfileId: lastProfileId,
+                sessionFile: params.sessionFile,
+                workspaceDir: resolvedWorkspace,
+                agentDir,
+                config: params.config,
+                skillsSnapshot: params.skillsSnapshot,
+                senderIsOwner: params.senderIsOwner,
+                provider,
+                model: modelId,
+                thinkLevel,
+                reasoningLevel: params.reasoningLevel,
+                bashElevated: params.bashElevated,
+                customInstructions: deferredCompact.instructions,
+                extraSystemPrompt: params.extraSystemPrompt,
+                ownerNumbers: params.ownerNumbers,
+              });
+              if (compactResult.compacted) {
+                autoCompactionCount += 1;
+                markCompactionCompleted(compactSessionKey);
+                log.info(
+                  `deferred session_compact succeeded: tokensBefore=${compactResult.result?.tokensBefore} tokensAfter=${compactResult.result?.tokensAfter}`,
+                );
+              } else {
+                log.warn(
+                  `deferred session_compact skipped: ${compactResult.reason ?? "nothing to compact"}`,
+                );
+              }
+            } catch (err) {
+              log.warn(`deferred session_compact failed: ${String(err)}`);
             }
           }
 
