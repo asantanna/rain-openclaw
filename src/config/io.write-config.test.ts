@@ -57,6 +57,7 @@ describe("config io write", () => {
               defaults: {
                 cliBackends: {
                   codex: {
+                    command: "codex",
                     env: {
                       OPENAI_API_KEY: "${OPENAI_API_KEY}",
                     },
@@ -112,7 +113,9 @@ describe("config io write", () => {
           {
             channels: {
               discord: {
-                allowFrom: ["${DISCORD_USER_ID}", "123"],
+                dm: {
+                  allowFrom: ["${DISCORD_USER_ID}", "123"],
+                },
               },
             },
           },
@@ -131,23 +134,30 @@ describe("config io write", () => {
       expect(snapshot.valid).toBe(true);
 
       const next = structuredClone(snapshot.config);
-      const allowFrom = Array.isArray(next.channels?.discord?.allowFrom)
-        ? next.channels?.discord?.allowFrom
+      const allowFrom = Array.isArray(next.channels?.discord?.dm?.allowFrom)
+        ? next.channels?.discord?.dm?.allowFrom
         : [];
       next.channels = {
         ...next.channels,
         discord: {
           ...next.channels?.discord,
-          allowFrom: [...allowFrom, "456"],
+          dm: {
+            ...next.channels?.discord?.dm,
+            allowFrom: [...allowFrom, "456"],
+          },
         },
       };
 
       await io.writeConfigFile(next);
 
       const persisted = JSON.parse(await fs.readFile(configPath, "utf-8")) as {
-        channels: { discord?: { allowFrom?: string[] } };
+        channels: { discord?: { dm?: { allowFrom?: string[] } } };
       };
-      expect(persisted.channels.discord?.allowFrom).toEqual(["${DISCORD_USER_ID}", "123", "456"]);
+      expect(persisted.channels.discord?.dm?.allowFrom).toEqual([
+        "${DISCORD_USER_ID}",
+        "123",
+        "456",
+      ]);
     });
   });
 });
