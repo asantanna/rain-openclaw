@@ -2,8 +2,8 @@ import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { OpenClawConfig } from "../../config/config.js";
-import type { WorkspaceBootstrapFile } from "../workspace.js";
 import type { EmbeddedContextFile } from "./types.js";
+import { DEFAULT_BOOTSTRAP_FILENAME, type WorkspaceBootstrapFile } from "../workspace.js";
 
 type ContentBlockWithSignature = {
   thought_signature?: unknown;
@@ -167,6 +167,11 @@ export function buildBootstrapContextFiles(
   const result: EmbeddedContextFile[] = [];
   for (const file of files) {
     if (file.missing) {
+      // BOOTSTRAP.md is intentionally temporary (read-once onboarding file).
+      // Don't inject a [MISSING] marker for it — it's expected to be absent.
+      if (file.name === DEFAULT_BOOTSTRAP_FILENAME) {
+        continue;
+      }
       result.push({
         path: file.name,
         content: `[MISSING] Expected at: ${file.path}`,
