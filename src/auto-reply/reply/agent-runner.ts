@@ -35,6 +35,7 @@ import { buildReplyPayloads } from "./agent-runner-payloads.js";
 import { appendUsageLine, formatResponseUsageLine } from "./agent-runner-utils.js";
 import { createAudioAsVoiceBuffer, createBlockReplyPipeline } from "./block-reply-pipeline.js";
 import { resolveBlockStreamingCoalescing } from "./block-streaming.js";
+import { enqueueContextWarningIfNeeded } from "./context-warning.js";
 import { createFollowupRunner } from "./followup-runner.js";
 import { enqueueFollowupRun, type FollowupRun, type QueueSettings } from "./queue.js";
 import { createReplyToModeFilterForChannel, resolveReplyToMode } from "./reply-threading.js";
@@ -396,6 +397,17 @@ export async function runReplyAgent(params: {
       systemPromptReport: runResult.meta.systemPromptReport,
       cliSessionId,
     });
+
+    // Warn agent if context usage is approaching compaction thresholds
+    if (sessionKey) {
+      enqueueContextWarningIfNeeded({
+        sessionKey,
+        usage,
+        lastCallUsage: runResult.meta.agentMeta?.lastCallUsage,
+        contextTokens: contextTokensUsed,
+        promptTokens,
+      });
+    }
 
     // Drain any late tool/block deliveries before deciding there's "nothing to send".
     // Otherwise, a late typing trigger (e.g. from a tool callback) can outlive the run and
