@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import type { OpenClawConfig } from "../config/types.js";
 import { isLibrarianEnabled, resolveMindTheoryConfig } from "./config.js";
 
@@ -22,6 +23,9 @@ type StoredCompactParams = {
 };
 
 const idleTimers = new Map<string, IdleTimerEntry>();
+
+/** Track session file size after last compaction to skip no-op cycles. */
+const lastCompactedFileSize = new Map<string, number>();
 
 /**
  * Reset the idle compaction timer for a session.
@@ -76,6 +80,18 @@ export function resetIdleTimer(
  * Uses compactEmbeddedPiSessionDirect which has NO 40% threshold.
  */
 async function triggerIdleCompaction(params: StoredCompactParams): Promise<void> {
+  // Skip if session file hasn't changed since last compaction
+  try {
+    const stat = await fs.stat(params.sessionFile);
+    const prevSize = lastCompactedFileSize.get(params.sessionKey);
+    if (prevSize !== undefined && stat.size === prevSize) {
+      console.log(`[mind-theory] bedtime: session ${params.sessionKey} idle, skipping (unchanged)`);
+      return;
+    }
+  } catch {
+    // File missing or stat failed — proceed with compaction anyway
+  }
+
   console.log(`[mind-theory] bedtime: session ${params.sessionKey} idle, triggering compaction`);
 
   try {
@@ -95,6 +111,16 @@ async function triggerIdleCompaction(params: StoredCompactParams): Promise<void>
     console.log(
       `[mind-theory] bedtime: compaction ${result.ok ? "succeeded" : "failed"}: ${result.reason ?? "ok"}`,
     );
+
+    // Record file size after compaction to detect future no-ops
+    if (result.ok) {
+      try {
+        const postStat = await fs.stat(params.sessionFile);
+        lastCompactedFileSize.set(params.sessionKey, postStat.size);
+      } catch {
+        // Non-critical
+      }
+    }
   } catch (err) {
     console.log(`[mind-theory] bedtime: compaction error: ${String(err)}`);
   }
