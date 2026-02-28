@@ -99,6 +99,32 @@ const MemorySchema = z
   .strict()
   .optional();
 
+const MindTheorySchema = z
+  .object({
+    librarian: z
+      .object({
+        enabled: z.boolean().optional(),
+        model: z.string().optional(),
+        syncCompaction: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+    bedtime: z
+      .object({
+        idleMinutes: z.number().int().positive().optional(),
+      })
+      .strict()
+      .optional(),
+    researcher: z
+      .object({
+        enabled: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .optional();
+
 export const OpenClawSchema = z
   .object({
     meta: z
@@ -536,6 +562,7 @@ export const OpenClawSchema = z
       .strict()
       .optional(),
     memory: MemorySchema,
+    mindTheory: MindTheorySchema,
     skills: z
       .object({
         allowBundled: z.array(z.string()).optional(),
