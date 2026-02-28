@@ -36,6 +36,10 @@ export function isLibrarianEnabled(cfg?: OpenClawConfig): boolean {
   return cfg?.mindTheory?.librarian?.enabled === true;
 }
 
+export function isResearcherEnabled(cfg?: OpenClawConfig): boolean {
+  return cfg?.mindTheory?.researcher?.enabled === true;
+}
+
 /** Derive a human-readable agent name from an agentId. */
 export function agentDisplayName(agentId: string): string {
   // "rain" → "Rain", "tio-claude" → "Tio Claude"

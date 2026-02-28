@@ -425,6 +425,18 @@ export async function runReplyAgent(params: {
       } catch {
         // Mind-theory module load failure — non-critical
       }
+
+      // Mind-theory: async researcher — search memories, log results (fire-and-forget)
+      try {
+        const { runResearcherAsync } = await import("../../mind-theory/index.js");
+        runResearcherAsync({
+          sessionKey,
+          lastUserMessage: commandBody,
+          config: cfg,
+        });
+      } catch {
+        // Mind-theory module load failure — non-critical
+      }
     }
 
     // Drain any late tool/block deliveries before deciding there's "nothing to send".
