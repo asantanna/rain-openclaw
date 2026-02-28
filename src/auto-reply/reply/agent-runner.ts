@@ -407,6 +407,24 @@ export async function runReplyAgent(params: {
         contextTokens: contextTokensUsed,
         promptTokens,
       });
+
+      // Mind-theory: reset idle compaction timer after each agent run
+      try {
+        const { resetIdleTimer } = await import("../../mind-theory/index.js");
+        resetIdleTimer(
+          sessionKey,
+          {
+            sessionFile: followupRun.run.sessionFile,
+            config: cfg,
+            provider: followupRun.run.provider,
+            model: followupRun.run.model,
+            workspaceDir: followupRun.run.workspaceDir,
+          },
+          cfg,
+        );
+      } catch {
+        // Mind-theory module load failure — non-critical
+      }
     }
 
     // Drain any late tool/block deliveries before deciding there's "nothing to send".

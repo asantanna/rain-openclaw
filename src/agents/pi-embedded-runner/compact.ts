@@ -443,6 +443,19 @@ export async function compactEmbeddedPiSessionDirect(
         if (limited.length > 0) {
           session.agent.replaceMessages(limited);
         }
+        // Mind-theory: run batch Librarian before compaction summarizes messages
+        try {
+          const { mindTheoryBeforeCompaction } = await import("../../mind-theory/index.js");
+          await mindTheoryBeforeCompaction({
+            messages: session.messages,
+            sessionKey: params.sessionKey ?? params.sessionId,
+            sessionFile: params.sessionFile,
+            config: params.config,
+          });
+        } catch (err) {
+          console.log(`[mind-theory] before-compaction failed: ${String(err)}`);
+        }
+
         const result = await session.compact(params.customInstructions);
         // Estimate tokens after compaction by summing token estimates for remaining messages
         let tokensAfter: number | undefined;
