@@ -42,10 +42,16 @@ export async function mindTheoryBeforeCompaction(
   const agentName = agentDisplayName(agentId);
   const nameMapping = getNameMapping(agentId);
 
-  // Serialize messages as role+content pairs for Python
+  // Serialize messages as role+content pairs for Python.
+  // Strip any injected EVOKED MEMORIES blocks so the librarian doesn't
+  // re-extract memories that were already in the DB (circular extraction).
   const simplifiedMessages = params.messages.map((msg: unknown) => {
     const m = msg as { role?: string; content?: unknown };
-    return { role: m.role ?? "unknown", content: m.content ?? "" };
+    let content = m.content ?? "";
+    if (typeof content === "string") {
+      content = stripEvokedMemoriesBlock(content);
+    }
+    return { role: m.role ?? "unknown", content };
   });
 
   const stdinData = JSON.stringify({
@@ -71,6 +77,11 @@ export async function mindTheoryBeforeCompaction(
     const elapsed = Date.now() - startMs;
     console.log(`[mind-theory] librarian: failed after ${elapsed}ms — ${String(err)}`);
   }
+}
+
+/** Remove ### EVOKED MEMORIES ... ### END EVOKED MEMORIES blocks from message text. */
+function stripEvokedMemoriesBlock(text: string): string {
+  return text.replace(/### EVOKED MEMORIES\n[\s\S]*?### END EVOKED MEMORIES\n*/g, "").trim();
 }
 
 function spawnPython(stdinData: string): Promise<string> {

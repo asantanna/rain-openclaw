@@ -118,6 +118,7 @@ const MindTheorySchema = z
     researcher: z
       .object({
         enabled: z.boolean().optional(),
+        inject: z.boolean().optional(),
       })
       .strict()
       .optional(),

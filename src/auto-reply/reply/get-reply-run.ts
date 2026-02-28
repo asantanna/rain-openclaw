@@ -238,6 +238,35 @@ export async function runPreparedReply(
     storePath,
     abortKey: command.abortKey,
   });
+  // Mind-theory: sync researcher — inject evoked memories before response
+  if (sessionKey) {
+    try {
+      const { runResearcherSync, isResearcherInjectEnabled } =
+        await import("../../mind-theory/index.js");
+      if (isResearcherInjectEnabled(cfg)) {
+        const { memories, latencyMs } = await runResearcherSync({
+          sessionKey,
+          lastUserMessage: baseBodyTrimmed,
+          config: cfg,
+        });
+        if (memories.length > 0) {
+          const block = [
+            "### EVOKED MEMORIES",
+            ...memories.map((m: { fact: string }) => `- ${m.fact}`),
+            "### END EVOKED MEMORIES",
+          ].join("\n");
+          prefixedBodyBase = `${block}\n\n${prefixedBodyBase}`;
+        }
+        if (latencyMs > 500) {
+          console.log(
+            `[mind-theory] researcher: WARNING sync latency ${latencyMs}ms exceeds 500ms target`,
+          );
+        }
+      }
+    } catch {
+      // Mind-theory module load failure — non-critical
+    }
+  }
   const isGroupSession = sessionEntry?.chatType === "group" || sessionEntry?.chatType === "channel";
   const isMainSession = !isGroupSession && sessionKey === normalizeMainKey(sessionCfg?.mainKey);
   prefixedBodyBase = await prependSystemEvents({

@@ -13,10 +13,69 @@ export type ResearcherParams = {
   config?: OpenClawConfig;
 };
 
+export type EvokedMemory = { fact: string; score: number };
+
+/**
+ * Run the Researcher synchronously before the agent sees the turn.
+ * Returns evoked memories for injection into the conversation context.
+ * Never throws — returns empty on any failure.
+ */
+export async function runResearcherSync(params: ResearcherParams): Promise<{
+  memories: EvokedMemory[];
+  latencyMs: number;
+}> {
+  const empty = { memories: [] as EvokedMemory[], latencyMs: -1 };
+
+  if (!isResearcherEnabled(params.config)) {
+    return empty;
+  }
+
+  const agentId = resolveAgentIdFromSessionKey(params.sessionKey);
+  if (!agentId || agentId === "main") {
+    return empty;
+  }
+
+  const query = stripInboundMeta(params.lastUserMessage);
+  if (!query || query.length < 10) {
+    return empty;
+  }
+
+  const dbPath = join(homedir(), `.openclaw/agents/${agentId}/memories.sqlite`);
+  const logPath = join(homedir(), `.openclaw/agents/${agentId}/researcher.log`);
+
+  const stdinData = JSON.stringify({
+    query,
+    agent_id: agentId,
+    db_path: dbPath,
+    session_key: params.sessionKey,
+    log_path: logPath,
+  });
+
+  const startMs = Date.now();
+  console.log(`[mind-theory] researcher: sync search for ${agentId}`);
+
+  try {
+    const stdout = await spawnResearcher(stdinData, 10_000);
+    const elapsed = Date.now() - startMs;
+    const parsed = JSON.parse(stdout) as { injected?: EvokedMemory[]; latency_ms?: number };
+    const memories = parsed.injected ?? [];
+    console.log(
+      `[mind-theory] researcher: sync done for ${agentId} — ${memories.length} injected in ${elapsed}ms`,
+    );
+    return { memories, latencyMs: elapsed };
+  } catch (err) {
+    const elapsed = Date.now() - startMs;
+    console.log(
+      `[mind-theory] researcher: sync failed for ${agentId} after ${elapsed}ms — ${String(err)}`,
+    );
+    return empty;
+  }
+}
+
 /**
  * Run the Researcher asynchronously after each agent turn.
  * Fire-and-forget — never throws, never blocks the response.
- * Searches the memory DB and logs what it would surface (log-only mode).
+ * Used for log-only mode when injection is disabled.
  */
 export function runResearcherAsync(params: ResearcherParams): void {
   if (!isResearcherEnabled(params.config)) {
@@ -65,13 +124,13 @@ function stripInboundMeta(text: string): string {
   return cleaned.trim();
 }
 
-function spawnResearcher(stdinData: string): Promise<string> {
+function spawnResearcher(stdinData: string, timeoutMs = 30_000): Promise<string> {
   return new Promise((resolve, reject) => {
     const cwd = join(homedir(), ".openclaw/shared/mind-theory/memory/offline-test");
     const proc = spawn(PYTHON_VENV, ["live_researcher.py"], {
       cwd,
       stdio: ["pipe", "pipe", "pipe"],
-      timeout: 30_000, // 30 second timeout (search should be fast)
+      timeout: timeoutMs,
     });
 
     let stdout = "";
@@ -91,7 +150,6 @@ function spawnResearcher(stdinData: string): Promise<string> {
         }
       }
       if (code === 0) {
-        console.log(`[mind-theory] researcher: ${stdout.trim()}`);
         resolve(stdout.trim());
       } else {
         reject(new Error(`live_researcher.py exited with code ${code}: ${stderr.trim()}`));

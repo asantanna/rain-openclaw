@@ -3,13 +3,13 @@ import type { OpenClawConfig } from "../config/types.js";
 export type ResolvedMindTheoryConfig = {
   librarian: { enabled: boolean; model: string; syncCompaction: boolean };
   bedtime: { idleMinutes: number };
-  researcher: { enabled: boolean };
+  researcher: { enabled: boolean; inject: boolean };
 };
 
 const DEFAULTS: ResolvedMindTheoryConfig = {
   librarian: { enabled: false, model: "claude-sonnet-4-6", syncCompaction: true },
   bedtime: { idleMinutes: 30 },
-  researcher: { enabled: false },
+  researcher: { enabled: false, inject: false },
 };
 
 export function resolveMindTheoryConfig(cfg?: OpenClawConfig): ResolvedMindTheoryConfig {
@@ -28,6 +28,7 @@ export function resolveMindTheoryConfig(cfg?: OpenClawConfig): ResolvedMindTheor
     },
     researcher: {
       enabled: mt.researcher?.enabled ?? DEFAULTS.researcher.enabled,
+      inject: mt.researcher?.inject ?? DEFAULTS.researcher.inject,
     },
   };
 }
@@ -38,6 +39,12 @@ export function isLibrarianEnabled(cfg?: OpenClawConfig): boolean {
 
 export function isResearcherEnabled(cfg?: OpenClawConfig): boolean {
   return cfg?.mindTheory?.researcher?.enabled === true;
+}
+
+/** True when both researcher.enabled AND researcher.inject are on. */
+export function isResearcherInjectEnabled(cfg?: OpenClawConfig): boolean {
+  const r = cfg?.mindTheory?.researcher;
+  return r?.enabled === true && r?.inject === true;
 }
 
 /** Derive a human-readable agent name from an agentId. */

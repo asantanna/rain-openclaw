@@ -426,14 +426,18 @@ export async function runReplyAgent(params: {
         // Mind-theory module load failure — non-critical
       }
 
-      // Mind-theory: async researcher — search memories, log results (fire-and-forget)
+      // Mind-theory: async researcher — log-only mode (fire-and-forget).
+      // Skipped when inject mode is enabled (sync path in get-reply-run handles it).
       try {
-        const { runResearcherAsync } = await import("../../mind-theory/index.js");
-        runResearcherAsync({
-          sessionKey,
-          lastUserMessage: commandBody,
-          config: cfg,
-        });
+        const { runResearcherAsync, isResearcherInjectEnabled } =
+          await import("../../mind-theory/index.js");
+        if (!isResearcherInjectEnabled(cfg)) {
+          runResearcherAsync({
+            sessionKey,
+            lastUserMessage: commandBody,
+            config: cfg,
+          });
+        }
       } catch {
         // Mind-theory module load failure — non-critical
       }
