@@ -70,6 +70,12 @@ export function createGatewayCloseHandler(params: {
     await stopGmailWatcher();
     params.cron.stop();
     params.heartbeatRunner.stop();
+    try {
+      const { shutdownResearcherDaemon } = await import("../mind-theory/index.js");
+      shutdownResearcherDaemon();
+    } catch {
+      /* non-critical */
+    }
     for (const timer of params.nodePresenceTimers.values()) {
       clearInterval(timer);
     }
