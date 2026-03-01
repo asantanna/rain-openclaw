@@ -10,7 +10,7 @@ import { isResearcherEnabled } from "./config.js";
 const PYTHON_VENV = join(homedir(), ".openclaw/shared/mind-theory/experiments/.venv/bin/python3");
 const DAEMON_SCRIPT = "live_researcher_daemon.py";
 const SUBPROCESS_SCRIPT = "live_researcher.py";
-const DAEMON_CWD = join(homedir(), ".openclaw/shared/mind-theory/memory/offline-test");
+const DAEMON_CWD = join(homedir(), ".openclaw/shared/mind-theory/memory/live");
 
 export type ResearcherParams = {
   sessionKey: string;

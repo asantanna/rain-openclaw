@@ -86,7 +86,7 @@ function stripEvokedMemoriesBlock(text: string): string {
 
 function spawnPython(stdinData: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const cwd = join(homedir(), ".openclaw/shared/mind-theory/memory/offline-test");
+    const cwd = join(homedir(), ".openclaw/shared/mind-theory/memory/live");
     const proc = spawn(PYTHON_VENV, ["live_batch.py"], {
       cwd,
       stdio: ["pipe", "pipe", "pipe"],
