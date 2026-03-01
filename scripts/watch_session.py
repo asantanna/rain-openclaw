@@ -4,6 +4,7 @@ Live session watcher — tails a conversation with evoked memory display.
 
 Usage:
   python3 watch_session.py rain                         # auto-find latest active session
+  python3 watch_session.py rain --researcher            # also show researcher log (scores, cooldowns)
   python3 watch_session.py rain -k agent:rain:telegram:...  # specific session
   python3 watch_session.py rain --history 20            # show last 20 messages for context
   python3 watch_session.py rain --no-history            # skip history, live only
@@ -177,15 +178,28 @@ def clean_user_text(text: str) -> tuple[str, str]:
     return "User", text
 
 
-def display_message(msg: dict, agent_id: str, truncate: int = 0) -> None:
+def _indent_continuation(text: str, indent: str = "           ") -> str:
+    """Indent continuation lines of multiline text."""
+    lines = text.split("\n")
+    if len(lines) <= 1:
+        return text
+    return lines[0] + "\n" + "\n".join(indent + l for l in lines[1:])
+
+
+def display_message(msg: dict, agent_id: str, truncate: int = 0) -> str | None:
+    """Display a message. Returns role for turn-spacing, or None if skipped."""
     time_str = format_time(msg["timestamp"])
     role = msg["role"]
     text = msg["text"]
 
     if role == "user":
         sender, text = clean_user_text(text)
+        text = text.strip()
+        if not text:
+            return None
         if truncate and len(text) > truncate:
             text = text[:truncate] + "..."
+        text = _indent_continuation(text)
         color = CYAN if sender != "User" else YELLOW
         print(f"{DIM}[{time_str}]{RESET} {color}{sender}{RESET}: {text}")
 
@@ -195,12 +209,21 @@ def display_message(msg: dict, agent_id: str, truncate: int = 0) -> None:
                 eline = eline.strip()
                 if eline:
                     print(f"           {MAGENTA}🧠 {eline}{RESET}")
+        return role
 
     elif role == "assistant":
+        text = text.strip()
+        # Skip empty messages and NO_REPLY
+        if not text or text == "NO_REPLY":
+            return None
         label = agent_id.capitalize()
         if truncate and len(text) > truncate:
             text = text[:truncate] + "..."
+        text = _indent_continuation(text)
         print(f"{DIM}[{time_str}]{RESET} {GREEN}{label}{RESET}: {text}")
+        return role
+
+    return None
 
 
 def display_researcher(entry: dict, session_key: str | None) -> None:
@@ -214,6 +237,11 @@ def display_researcher(entry: dict, session_key: str | None) -> None:
     results = entry.get("results", [])
 
     if cooldown:
+        query = entry.get("query", "")
+        if query:
+            if len(query) > 90:
+                query = query[:90] + "..."
+            print(f"           {DIM}▸ \"{query}\"{RESET}")
         top = results[0] if results else {}
         fact = top.get("fact", "?")
         if len(fact) > 70:
@@ -225,6 +253,12 @@ def display_researcher(entry: dict, session_key: str | None) -> None:
     elif results:
         injected = [r for r in results if r.get("injected")]
         if injected:
+            # Show what triggered the memory
+            query = entry.get("query", "")
+            if query:
+                if len(query) > 90:
+                    query = query[:90] + "..."
+                print(f"           {DIM}▸ \"{query}\"{RESET}")
             for r in injected:
                 score = r.get("score", "?")
                 fact = r.get("fact", "?")
@@ -247,6 +281,46 @@ def display_researcher(entry: dict, session_key: str | None) -> None:
 # Tail loop
 # ---------------------------------------------------------------------------
 
+def _load_researcher_entries(researcher_path: Path, session_key: str | None) -> list[tuple[datetime, dict]]:
+    """Load researcher log entries, return [(timestamp, entry)] filtered by session."""
+    entries = []
+    if not researcher_path.exists():
+        return entries
+    with open(researcher_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if session_key and entry.get("session") != session_key:
+                continue
+            ts = _parse_ts(entry.get("ts"))
+            if ts:
+                entries.append((ts, entry))
+    return entries
+
+
+def _read_new_lines(path: Path, pos: int) -> tuple[list[str], int]:
+    """Read new lines from a file starting at pos. Returns (lines, new_pos)."""
+    if not path.exists():
+        return [], pos
+    try:
+        current = path.stat().st_size
+    except FileNotFoundError:
+        return [], pos
+    if current <= pos:
+        return [], pos
+    with open(path) as f:
+        f.seek(pos)
+        data = f.read()
+        new_pos = f.tell()
+    lines = [l for l in data.strip().split("\n") if l.strip()]
+    return lines, new_pos
+
+
 def tail_files(
     session_path: Path,
     researcher_path: Path,
@@ -254,68 +328,96 @@ def tail_files(
     session_key: str | None,
     history: int = 10,
     truncate: int = 0,
+    show_researcher: bool = False,
 ) -> None:
-    """Tail session JSONL and researcher log, interleaving output."""
+    """Tail session JSONL and (optionally) researcher log, interleaved by timestamp."""
 
-    # Show history
+    # --- History: merge both streams chronologically ---
     if history > 0 and session_path.exists():
+        # Load session messages
         with open(session_path) as f:
             lines = f.readlines()
-        messages = [m for line in lines if (m := parse_message(line))]
-        if messages:
-            show = messages[-history:]
-            print(f"{DIM}--- last {len(show)} of {len(messages)} messages ---{RESET}")
-            for msg in show:
-                display_message(msg, agent_id, truncate)
-            print(f"{DIM}--- live ---{RESET}")
+        all_msgs = []
+        for line in lines:
+            msg = parse_message(line)
+            if msg and msg["timestamp"]:
+                all_msgs.append(msg)
+
+        if all_msgs:
+            show_msgs = all_msgs[-history:]
+            earliest = show_msgs[0]["timestamp"]
+
+            # Build merged timeline: ("msg", ts, data) or ("researcher", ts, data)
+            timeline = []
+            for msg in show_msgs:
+                timeline.append(("msg", msg["timestamp"], msg))
+
+            if show_researcher:
+                researcher_entries = _load_researcher_entries(researcher_path, session_key)
+                relevant = [(ts, e) for ts, e in researcher_entries if ts >= earliest]
+                for ts, entry in relevant:
+                    timeline.append(("researcher", ts, entry))
+
+            timeline.sort(key=lambda x: x[1])
+
+            print(f"{DIM}--- last {len(show_msgs)} of {len(all_msgs)} messages ---{RESET}")
+            last_role = None
+            for kind, _ts, data in timeline:
+                if kind == "msg":
+                    role = data.get("role")
+                    if last_role and role != last_role:
+                        print()  # blank line between turn changes
+                    shown = display_message(data, agent_id, truncate)
+                    if shown:
+                        last_role = shown
+                else:
+                    display_researcher(data, session_key)
+            print(f"\n{DIM}--- live ---{RESET}")
             print()
 
     # Seek to end of both files
     session_pos = session_path.stat().st_size if session_path.exists() else 0
     researcher_pos = researcher_path.stat().st_size if researcher_path.exists() else 0
 
+    last_role = None
     try:
         while True:
-            changed = False
+            events = []
 
-            # Check researcher log first (fires before the agent response)
-            if researcher_path.exists():
-                try:
-                    current = researcher_path.stat().st_size
-                except FileNotFoundError:
-                    current = 0
-                if current > researcher_pos:
-                    with open(researcher_path) as f:
-                        f.seek(researcher_pos)
-                        new_data = f.read()
-                        researcher_pos = f.tell()
-                    for rline in new_data.strip().split("\n"):
-                        if rline.strip():
-                            try:
-                                display_researcher(json.loads(rline), session_key)
-                                changed = True
-                            except json.JSONDecodeError:
-                                pass
+            # Collect new researcher entries (only if opted in)
+            if show_researcher:
+                new_rlines, researcher_pos = _read_new_lines(researcher_path, researcher_pos)
+                for rline in new_rlines:
+                    try:
+                        entry = json.loads(rline)
+                        if session_key and entry.get("session") != session_key:
+                            continue
+                        ts = _parse_ts(entry.get("ts")) or datetime.now(timezone.utc)
+                        events.append(("researcher", ts, entry))
+                    except json.JSONDecodeError:
+                        pass
 
-            # Check session file
-            if session_path.exists():
-                try:
-                    current = session_path.stat().st_size
-                except FileNotFoundError:
-                    current = 0
-                if current > session_pos:
-                    with open(session_path) as f:
-                        f.seek(session_pos)
-                        new_data = f.read()
-                        session_pos = f.tell()
-                    for sline in new_data.strip().split("\n"):
-                        if sline.strip():
-                            msg = parse_message(sline)
-                            if msg:
-                                display_message(msg, agent_id, truncate)
-                                changed = True
+            # Collect new session messages
+            new_slines, session_pos = _read_new_lines(session_path, session_pos)
+            for sline in new_slines:
+                msg = parse_message(sline)
+                if msg:
+                    ts = msg["timestamp"] or datetime.now(timezone.utc)
+                    events.append(("msg", ts, msg))
 
-            if not changed:
+            if events:
+                events.sort(key=lambda x: x[1])
+                for kind, _ts, data in events:
+                    if kind == "msg":
+                        role = data.get("role")
+                        if last_role and role != last_role:
+                            print()
+                        shown = display_message(data, agent_id, truncate)
+                        if shown:
+                            last_role = shown
+                    else:
+                        display_researcher(data, session_key)
+            else:
                 time.sleep(0.3)
 
     except KeyboardInterrupt:
@@ -333,11 +435,13 @@ def main() -> None:
         epilog="""\
 Examples:
   %(prog)s rain                         # watch Rain's latest session
+  %(prog)s rain --researcher            # also show researcher log (scores, cooldowns)
   %(prog)s tio-claude                   # watch Tio's latest session
   %(prog)s rain -k agent:rain:telegram:dm:123  # specific session
   %(prog)s rain --history 20            # show last 20 messages
   %(prog)s rain --no-history            # live only, no backlog
   %(prog)s rain -t 200                  # truncate long messages
+  %(prog)s rain --full                  # no truncation
 """,
     )
     parser.add_argument("agent", help="Agent ID (e.g. rain, tio-claude)")
@@ -359,13 +463,25 @@ Examples:
         "-t",
         "--truncate",
         type=int,
-        default=0,
-        help="Truncate messages to N chars (0=no limit)",
+        default=500,
+        help="Truncate messages to N chars (0=no limit, default: 500)",
+    )
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Show full messages (no truncation)",
+    )
+    parser.add_argument(
+        "--researcher",
+        action="store_true",
+        help="Show researcher log (scores, cooldowns, queries)",
     )
 
     args = parser.parse_args()
     agent_id = args.agent
     history = 0 if args.no_history else args.history
+    if args.full:
+        args.truncate = 0
 
     # Resolve session
     if args.key:
@@ -388,7 +504,7 @@ Examples:
     print(f"{DIM}Ctrl+C to stop{RESET}")
     print()
 
-    tail_files(session_path, researcher_path, agent_id, session_key, history, args.truncate)
+    tail_files(session_path, researcher_path, agent_id, session_key, history, args.truncate, args.researcher)
 
 
 if __name__ == "__main__":
