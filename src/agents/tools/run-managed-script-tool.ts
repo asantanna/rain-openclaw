@@ -7,6 +7,7 @@ import { CONFIG_DIR } from "../../utils.js";
 import { jsonResult, readStringParam } from "./common.js";
 
 const MANAGED_SCRIPTS_DIR = path.join(CONFIG_DIR, "managed_scripts");
+const MANAGED_SCRIPTS_VENV_PYTHON = path.join(MANAGED_SCRIPTS_DIR, ".venv", "bin", "python3");
 const TIMEOUT_MS = 30_000;
 const MAX_OUTPUT = 50 * 1024;
 
@@ -35,6 +36,10 @@ function validateScriptName(name: string): void {
 
 function resolveInterpreter(scriptPath: string): string | undefined {
   const ext = path.extname(scriptPath).toLowerCase();
+  // For Python scripts, prefer the managed_scripts venv if it exists.
+  if (ext === ".py" && fs.existsSync(MANAGED_SCRIPTS_VENV_PYTHON)) {
+    return MANAGED_SCRIPTS_VENV_PYTHON;
+  }
   return INTERPRETER_MAP[ext];
 }
 
