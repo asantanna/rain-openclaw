@@ -43,6 +43,36 @@ function resolveInterpreter(scriptPath: string): string | undefined {
   return INTERPRETER_MAP[ext];
 }
 
+/** Shell-like arg splitting that respects single and double quotes. */
+function splitArgs(input: string): string[] {
+  const args: string[] = [];
+  let current = "";
+  let quote: string | null = null;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (quote) {
+      if (ch === quote) {
+        quote = null;
+      } else {
+        current += ch;
+      }
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (/\s/.test(ch)) {
+      if (current) {
+        args.push(current);
+        current = "";
+      }
+    } else {
+      current += ch;
+    }
+  }
+  if (current) {
+    args.push(current);
+  }
+  return args;
+}
+
 function truncate(text: string, max: number): string {
   if (text.length <= max) {
     return text;
@@ -50,7 +80,7 @@ function truncate(text: string, max: number): string {
   return text.slice(0, max) + `\n... (truncated at ${max} bytes)`;
 }
 
-export function createRunManagedScriptTool(): AnyAgentTool {
+export function createRunManagedScriptTool(options?: { agentId?: string }): AnyAgentTool {
   return {
     label: "Run Managed Script",
     name: "run_managed_script",
@@ -89,7 +119,7 @@ export function createRunManagedScriptTool(): AnyAgentTool {
 
       // Build command.
       const interpreter = resolveInterpreter(resolvedScript);
-      const argsList = argsStr.trim() ? argsStr.trim().split(/\s+/) : [];
+      const argsList = argsStr.trim() ? splitArgs(argsStr.trim()) : [];
       const cmd = interpreter ? interpreter : resolvedScript;
       const cmdArgs = interpreter ? [resolvedScript, ...argsList] : argsList;
 
@@ -101,7 +131,11 @@ export function createRunManagedScriptTool(): AnyAgentTool {
           {
             timeout: TIMEOUT_MS,
             maxBuffer: MAX_OUTPUT * 2,
-            env: { ...process.env, PYTHONUNBUFFERED: "1" },
+            env: {
+              ...process.env,
+              PYTHONUNBUFFERED: "1",
+              ...(options?.agentId ? { OPENCLAW_AGENT_ID: options.agentId } : {}),
+            },
           },
           (error, stdout, stderr) => {
             const exitCode =

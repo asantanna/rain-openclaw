@@ -157,7 +157,12 @@ export function createOpenClawTools(options?: {
     ...(webSearchTool ? [webSearchTool] : []),
     ...(webFetchTool ? [webFetchTool] : []),
     ...(imageTool ? [imageTool] : []),
-    createRunManagedScriptTool(),
+    createRunManagedScriptTool({
+      agentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
   ];
 
   const pluginTools = resolvePluginTools({

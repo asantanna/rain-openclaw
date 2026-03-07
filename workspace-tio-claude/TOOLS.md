@@ -63,6 +63,29 @@ You're sandboxed — similar to Rain's infancy lockdown, plus web search. Move c
     - Remove a file: run_managed_script script="file_ops.py" args="--agent tio-claude rm shared/old-file.md"
     - Remove a folder: run_managed_script script="file_ops.py" args="--agent tio-claude rm -r shared/old-folder"
 
+# TioEng Task Queue (FIFO)
+
+A message queue for exchanging tasks and results with TioEng (the engineering agent). Works like email — you have your own mailbox, and messages are delivered individually.
+
+- **Post a task**: run_managed_script script="post_to_tioeng.py" args="<slug> --body 'Description of what you need done'"
+  - Posts a task to TioEng's inbox. The slug is a short label (e.g. "analyze-data", "fix-bug").
+  - You can also pipe content via stdin instead of --body.
+
+- **Receive results**: run_managed_script script="read_from_tioeng.py"
+  - Reads the oldest unread result from your mailbox. Marks it as read.
+  - To re-read a specific result: run_managed_script script="read_from_tioeng.py" args="--task 92"
+
+- **Check status**: run_managed_script script="team_status.py"
+  - Shows queue state (pending/active/done tasks) and your personal unread count.
+
+- **List all tasks**: run_managed_script script="team_list.py"
+  - Shows all tasks with their status across all mailboxes.
+
+- **Peek at any task**: run_managed_script script="team_show.py" args="--task 92"
+  - Read-only view of any task/result without marking it read.
+
+Your identity is automatic (from OPENCLAW_AGENT_ID) — no need to specify who you are.
+
 # Shared Space
 
 The `shared/` directory in your workspace is a collaboration area accessible by both you and Rain. Use it for joint research, collaborative documents, etc.
