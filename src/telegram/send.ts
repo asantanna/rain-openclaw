@@ -25,6 +25,7 @@ import { splitTelegramCaption } from "./caption.js";
 import { resolveTelegramFetch } from "./fetch.js";
 import { renderTelegramHtmlText } from "./format.js";
 import { isRecoverableTelegramNetworkError } from "./network-errors.js";
+import { checkOutboundDedup } from "./outbound-dedup.js";
 import { makeProxyFetch } from "./proxy.js";
 import { recordSentMessage } from "./sent-message-cache.js";
 import { parseTelegramTarget, stripTelegramInternalPrefixes } from "./targets.js";
@@ -338,6 +339,10 @@ export async function sendMessageTelegram(
     params?: Record<string, unknown>,
     fallbackText?: string,
   ) => {
+    // Outbound dedup: suppress sequential identical sends.
+    if (checkOutboundDedup(chatId, rawText)) {
+      return undefined;
+    }
     return await sendWithThreadFallback(params, "message", async (effectiveParams, label) => {
       const htmlText = renderHtmlText(rawText);
       const baseParams = effectiveParams ? { ...effectiveParams } : {};

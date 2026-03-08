@@ -19,6 +19,7 @@ import {
   markdownToTelegramHtml,
   renderTelegramHtmlText,
 } from "../format.js";
+import { checkOutboundDedup } from "../outbound-dedup.js";
 import { buildInlineKeyboard } from "../send.js";
 import { cacheSticker, getCachedSticker } from "../sticker-cache.js";
 import { resolveTelegramVoiceSend } from "../voice.js";
@@ -506,6 +507,11 @@ async function sendTelegramText(
     replyMarkup?: ReturnType<typeof buildInlineKeyboard>;
   },
 ): Promise<number | undefined> {
+  // --- Outbound dedup: suppress sequential identical sends ---
+  if (checkOutboundDedup(chatId, text, runtime)) {
+    return undefined;
+  }
+
   const baseParams = buildTelegramSendParams({
     replyToMessageId: opts?.replyToMessageId,
     thread: opts?.thread,
