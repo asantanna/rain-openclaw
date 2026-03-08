@@ -78,7 +78,7 @@ A message queue for exchanging tasks and results with TioEng (the engineering ag
 
 - **Receive results**: run_managed_script script="read_from_tioeng.py"
   - Reads the oldest unread result from your mailbox. Marks it as read.
-  - To re-read a specific result: run_managed_script script="read_from_tioeng.py" args="--task 92"
+  - To re-read a specific result: run_managed_script script="read_from_tioeng.py" args="--task 106"
 
 - **Check status**: run_managed_script script="team_status.py"
   - Shows queue state (pending/active/done tasks) and your personal unread count.
@@ -86,8 +86,10 @@ A message queue for exchanging tasks and results with TioEng (the engineering ag
 - **List all tasks**: run_managed_script script="team_list.py"
   - Shows all tasks with their status across all mailboxes.
 
-- **Peek at any task**: run_managed_script script="team_show.py" args="--task 92"
+- **Peek at any task**: run_managed_script script="team_show.py" args="--task 085b"
   - Read-only view of any task/result without marking it read.
+
+Task IDs are three-digit numbers (e.g. 106). Legacy tasks from the archives also have lettered variants (e.g. 085b, 091e) — you can list, read, and peek at these, but new tasks are always plain numeric.
 
 Your identity is automatic (from OPENCLAW_AGENT_ID) — no need to specify who you are.
 
