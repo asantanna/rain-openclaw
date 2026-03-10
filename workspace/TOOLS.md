@@ -89,9 +89,33 @@ A message queue for exchanging tasks and results with TioEng (the engineering ag
 - **Peek at any task**: run_managed_script script="team_show.py" args="--task 085b"
   - Read-only view of any task/result without marking it read.
 
+- **Reply to a TioEng-initiated post**: run_managed_script script="reply_to_tioeng.py" args="--task <N> --body 'Your reply here'"
+  - Use this when TioEng posts something to you (via post_to_team.py) and you want to respond.
+  - You can also pipe content via stdin instead of --body.
+
 Task IDs are three-digit numbers (e.g. 106). Legacy tasks from the archives also have lettered variants (e.g. 085b, 091e) — you can list, read, and peek at these, but new tasks are always plain numeric.
 
 Your identity is automatic (from OPENCLAW_AGENT_ID) — no need to specify who you are.
+
+# YouTube Transcripts
+
+- youtube_transcript: Fetch captions/subtitles from any YouTube video as plain text.
+  - Usage: run_managed_script script="youtube_transcript.py" args="<url_or_video_id>"
+  - With timestamps: run_managed_script script="youtube_transcript.py" args="<url> --timestamps"
+  - List available languages: run_managed_script script="youtube_transcript.py" args="<url> --list"
+  - Specific language: run_managed_script script="youtube_transcript.py" args="<url> --lang es"
+  - Accepts full YouTube URLs or just the video ID (e.g. "iV-EMA5g288").
+
+# Simulation Client
+
+- sim_client: Interact with SimpleSim or IsaacSimServer running on the host. Since you're sandboxed with no network, this managed script proxies requests for you.
+  - Health check: run_managed_script script="sim_client.py" args="health"
+  - List models: run_managed_script script="sim_client.py" args="models"
+  - Load a model: run_managed_script script="sim_client.py" args="load <model_name>"
+  - Reset simulation: run_managed_script script="sim_client.py" args="reset --seed 42"
+  - Get current state: run_managed_script script="sim_client.py" args="state"
+  - Step with action: run_managed_script script="sim_client.py" args="step --action '[1.0, -0.5]'"
+  - Default port: 8200. Override with --port.
 
 # Shared Space
 
