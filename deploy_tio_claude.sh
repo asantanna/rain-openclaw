@@ -2,12 +2,17 @@
 
 # deploy_tio_claude.sh
 # Copies Tio Claude's workspace files from repo to live.
-# Same safety model as Rain's deploy: whitelist, not blacklist.
+# Safety model: whitelist, not blacklist — three tiers.
 #
-# REPO-AUTHORITATIVE (copied by this script):
-#   SOUL.md, IDENTITY.md, TOOLS.md, USER.md, AGENTS.md
+# REPO-AUTHORITATIVE (always overwritten):
+#   TOOLS.md, USER.md, AGENTS.md
 #
-# LIVE-AUTHORITATIVE (never touched — Tio Claude owns these):
+# DIFF-GATED (deploy fails if live differs from repo):
+#   SOUL.md, IDENTITY.md
+#   These are identity files the agent may modify. Drift is flagged
+#   for human review — accept changes into repo, or investigate.
+#
+# LIVE-AUTHORITATIVE (bootstrap only, never touched after):
 #   MEMORY.md, notes/, and anything else created in the live workspace.
 
 set -e
@@ -21,9 +26,8 @@ echo "Target: $TARGET_DIR"
 
 mkdir -p "$TARGET_DIR"
 
+# ── Tier 1: Repo-authoritative (always overwrite) ───────────────────
 REPO_FILES=(
-  SOUL.md
-  IDENTITY.md
   TOOLS.md
   USER.md
   AGENTS.md
@@ -37,7 +41,44 @@ for f in "${REPO_FILES[@]}"; do
   fi
 done
 
-# Bootstrap live-authoritative files only if they don't exist yet
+# ── Tier 2: Diff-gated (fail on drift) ──────────────────────────────
+DIFF_GATED_FILES=(
+  SOUL.md
+  IDENTITY.md
+)
+
+DRIFT_FOUND=0
+for f in "${DIFF_GATED_FILES[@]}"; do
+  if [ ! -f "$TARGET_DIR/$f" ]; then
+    # First deploy — bootstrap from repo
+    cp -v "$SOURCE_DIR/$f" "$TARGET_DIR/$f"
+    echo "  (bootstrapped $f)"
+  elif ! diff -q "$SOURCE_DIR/$f" "$TARGET_DIR/$f" > /dev/null 2>&1; then
+    echo ""
+    echo "==========================================================="
+    echo "  DRIFT DETECTED: $f"
+    echo "==========================================================="
+    echo ""
+    diff -u "$SOURCE_DIR/$f" "$TARGET_DIR/$f" || true
+    echo ""
+    echo "  Live file differs from repo. Review the diff above."
+    echo "  To accept: cp ~/.openclaw/workspace-tio-claude/$f workspace-tio-claude/$f"
+    echo "  Then commit and re-deploy."
+    echo ""
+    DRIFT_FOUND=1
+  else
+    echo "  $f: in sync"
+  fi
+done
+
+if [ "$DRIFT_FOUND" -eq 1 ]; then
+  echo "==========================================================="
+  echo "  DEPLOY ABORTED — resolve drifted files above first."
+  echo "==========================================================="
+  exit 1
+fi
+
+# ── Tier 3: Live-authoritative (bootstrap only) ─────────────────────
 if [ ! -f "$TARGET_DIR/MEMORY.md" ]; then
   cp -v "$SOURCE_DIR/MEMORY.md" "$TARGET_DIR/MEMORY.md"
   echo "(MEMORY.md bootstrapped — will not be overwritten on future deploys)"
