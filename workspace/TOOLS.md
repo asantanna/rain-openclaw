@@ -68,34 +68,30 @@ These are your available capabilities. Use them thoughtfully, per your SOUL.md b
     - Remove a file: run_managed_script script="file_ops.py" args="--agent rain rm shared/old-file.md"
     - Remove a folder: run_managed_script script="file_ops.py" args="--agent rain rm -r shared/old-folder"
 
-# TioEng Task Queue (FIFO)
+# Team Message Stream (FIFO)
 
-A message queue for exchanging tasks and results with TioEng (the engineering agent). Works like email — you have your own mailbox, and messages are delivered individually.
+A shared numbered message stream for exchanging tasks, results, and notes with TioEng and the team. All messages live in a single flat directory as immutable .md files. No read/unread tracking — you know what's new by the message number.
 
-- **Post a task**: run_managed_script script="post_to_tioeng.py" args="<slug> --body 'Description of what you need done'"
-  - Posts a task to TioEng's inbox. The slug is a short label (e.g. "analyze-data", "fix-bug").
-  - You can also pipe content via stdin instead of --body.
+- **Send a message**: run_managed_script script="send.py" args="--to tioeng --slug <subject> --body 'Your message here'"
+  - The slug is a kebab-case subject (e.g. "pid-rate-crossover", "fifo-redesign-results").
+  - Recipients: `tioeng`, `rain`, `tio-claude`, or `team` (for everyone).
+  - Optional threading: add `--re <N>` to reference a parent message (e.g. `--re 145`).
+  - You can also use `--file /path/to/file.md` instead of `--body`.
+  - Your identity is automatic (from OPENCLAW_AGENT_ID) — no need to specify who you are.
 
-- **Receive results**: run_managed_script script="read_from_tioeng.py"
-  - Reads the oldest unread result from your mailbox. Marks it as read.
-  - To re-read a specific result: run_managed_script script="read_from_tioeng.py" args="--task 106"
+- **List messages**: run_managed_script script="list_messages.py"
+  - Shows the last 20 messages by default. One line per message: number, from, to, date, slug.
+  - Filter by sender: `--from rain`
+  - Filter by recipient: `--to tioeng`
+  - Show messages from a number onward: `--since 140`
+  - Show last N: `--last 5`
 
-- **Check status**: run_managed_script script="team_status.py"
-  - Shows queue state (pending/active/done tasks) and your personal unread count.
+- **Read a message**: run_managed_script script="show_message.py" args="--msg 145"
+  - Shows the full content of any message by number. Read-only, no state changes.
 
-- **List all tasks**: run_managed_script script="team_list.py"
-  - Shows all tasks with their status across all mailboxes.
+Messages are plain .md files in `shared/mind-theory/experiments/tioeng/messages/`. You can also grep them directly with bash if needed.
 
-- **Peek at any task**: run_managed_script script="team_show.py" args="--task 085b"
-  - Read-only view of any task/result without marking it read.
-
-- **Reply to a TioEng-initiated post**: run_managed_script script="reply_to_tioeng.py" args="--task <N> --body 'Your reply here'"
-  - Use this when TioEng posts something to you (via post_to_team.py) and you want to respond.
-  - You can also pipe content via stdin instead of --body.
-
-Task IDs are three-digit numbers (e.g. 106). Legacy tasks from the archives also have lettered variants (e.g. 085b, 091e) — you can list, read, and peek at these, but new tasks are always plain numeric.
-
-Your identity is automatic (from OPENCLAW_AGENT_ID) — no need to specify who you are.
+Legacy task IDs include lettered variants (e.g. 085b, 091e) from the archives. New messages are always plain numeric.
 
 # YouTube Transcripts
 
