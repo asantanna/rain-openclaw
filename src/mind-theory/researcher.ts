@@ -42,10 +42,17 @@ const responseQueue: PendingQuery[] = [];
 
 function spawnDaemon(): Promise<boolean> {
   return new Promise((resolve) => {
-    const proc = spawn(PYTHON_VENV, [DAEMON_SCRIPT], {
-      cwd: DAEMON_CWD,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    let proc;
+    try {
+      proc = spawn(PYTHON_VENV, [DAEMON_SCRIPT], {
+        cwd: DAEMON_CWD,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } catch (err) {
+      console.log(`[mind-theory] researcher daemon: spawn failed — ${String(err)}`);
+      resolve(false);
+      return;
+    }
 
     daemon = proc;
     daemonReady = false;
@@ -56,6 +63,12 @@ function spawnDaemon(): Promise<boolean> {
       teardownDaemon("ready timeout");
       resolve(false);
     }, 10_000);
+
+    // Catch EPIPE on daemon stdin — daemon may die unexpectedly
+    proc.stdin.on("error", (err) => {
+      console.log(`[mind-theory] researcher daemon: stdin error — ${err.message}`);
+      teardownDaemon("stdin error");
+    });
 
     // Log stderr (Python logging goes there)
     proc.stderr.on("data", (chunk: Buffer) => {
@@ -334,11 +347,25 @@ function stripInboundMeta(text: string): string {
 
 function spawnResearcher(stdinData: string, timeoutMs = 30_000): Promise<string> {
   return new Promise((resolve, reject) => {
-    const proc = spawn(PYTHON_VENV, [SUBPROCESS_SCRIPT], {
-      cwd: DAEMON_CWD,
-      stdio: ["pipe", "pipe", "pipe"],
-      timeout: timeoutMs,
-    });
+    let settled = false;
+    const fail = (err: Error) => {
+      if (!settled) {
+        settled = true;
+        reject(err);
+      }
+    };
+
+    let proc;
+    try {
+      proc = spawn(PYTHON_VENV, [SUBPROCESS_SCRIPT], {
+        cwd: DAEMON_CWD,
+        stdio: ["pipe", "pipe", "pipe"],
+        timeout: timeoutMs,
+      });
+    } catch (err) {
+      fail(new Error(`Failed to spawn live_researcher.py: ${String(err)}`));
+      return;
+    }
 
     let stdout = "";
     let stderr = "";
@@ -350,12 +377,20 @@ function spawnResearcher(stdinData: string, timeoutMs = 30_000): Promise<string>
       stderr += chunk.toString();
     });
 
+    proc.stdin.on("error", (err) => {
+      fail(new Error(`researcher stdin write failed: ${err.message}`));
+    });
+
     proc.on("close", (code) => {
       if (stderr.trim()) {
         for (const line of stderr.trim().split("\n")) {
           console.log(`[mind-theory] py: ${line}`);
         }
       }
+      if (settled) {
+        return;
+      }
+      settled = true;
       if (code === 0) {
         resolve(stdout.trim());
       } else {
@@ -364,10 +399,14 @@ function spawnResearcher(stdinData: string, timeoutMs = 30_000): Promise<string>
     });
 
     proc.on("error", (err) => {
-      reject(new Error(`Failed to spawn live_researcher.py: ${err.message}`));
+      fail(new Error(`Failed to spawn live_researcher.py: ${err.message}`));
     });
 
-    proc.stdin.write(stdinData);
-    proc.stdin.end();
+    try {
+      proc.stdin.write(stdinData);
+      proc.stdin.end();
+    } catch (err) {
+      fail(new Error(`researcher stdin write threw: ${String(err)}`));
+    }
   });
 }

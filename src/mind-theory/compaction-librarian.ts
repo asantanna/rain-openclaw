@@ -86,12 +86,26 @@ function stripEvokedMemoriesBlock(text: string): string {
 
 function spawnPython(stdinData: string): Promise<string> {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const fail = (err: Error) => {
+      if (!settled) {
+        settled = true;
+        reject(err);
+      }
+    };
+
     const cwd = join(homedir(), ".openclaw/shared/mind-theory/memory/live");
-    const proc = spawn(PYTHON_VENV, ["live_batch.py"], {
-      cwd,
-      stdio: ["pipe", "pipe", "pipe"],
-      timeout: 120_000, // 2 minute timeout
-    });
+    let proc;
+    try {
+      proc = spawn(PYTHON_VENV, ["live_batch.py"], {
+        cwd,
+        stdio: ["pipe", "pipe", "pipe"],
+        timeout: 120_000, // 2 minute timeout
+      });
+    } catch (err) {
+      fail(new Error(`Failed to spawn live_batch.py: ${String(err)}`));
+      return;
+    }
 
     let stdout = "";
     let stderr = "";
@@ -103,6 +117,11 @@ function spawnPython(stdinData: string): Promise<string> {
       stderr += chunk.toString();
     });
 
+    // Catch EPIPE / write errors on stdin — the child may exit before we finish writing.
+    proc.stdin.on("error", (err) => {
+      fail(new Error(`stdin write failed: ${err.message}`));
+    });
+
     proc.on("close", (code) => {
       // Log stderr (Python's logging goes there)
       if (stderr.trim()) {
@@ -110,6 +129,10 @@ function spawnPython(stdinData: string): Promise<string> {
           console.log(`[mind-theory] py: ${line}`);
         }
       }
+      if (settled) {
+        return; // Already rejected (e.g. stdin EPIPE)
+      }
+      settled = true;
       if (code === 0) {
         resolve(stdout.trim());
       } else {
@@ -118,10 +141,14 @@ function spawnPython(stdinData: string): Promise<string> {
     });
 
     proc.on("error", (err) => {
-      reject(new Error(`Failed to spawn live_batch.py: ${err.message}`));
+      fail(new Error(`Failed to spawn live_batch.py: ${err.message}`));
     });
 
-    proc.stdin.write(stdinData);
-    proc.stdin.end();
+    try {
+      proc.stdin.write(stdinData);
+      proc.stdin.end();
+    } catch (err) {
+      fail(new Error(`stdin write threw: ${String(err)}`));
+    }
   });
 }

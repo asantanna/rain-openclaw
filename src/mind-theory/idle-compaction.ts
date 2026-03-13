@@ -66,7 +66,9 @@ export function resetIdleTimer(
 
   const timer = setTimeout(() => {
     idleTimers.delete(sessionKey);
-    void triggerIdleCompaction(compactParams);
+    triggerIdleCompaction(compactParams).catch((err) => {
+      console.log(`[mind-theory] bedtime: unhandled error: ${String(err)}`);
+    });
   }, idleMs);
 
   // Don't keep the process alive just for idle timers
