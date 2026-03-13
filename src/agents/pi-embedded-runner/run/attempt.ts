@@ -493,7 +493,21 @@ export async function runEmbeddedAttempt(
         sessionManager,
         settingsManager,
       }));
-      applySystemPromptOverrideToSession(session, systemPromptText);
+      // Inject compaction summaries into fresh sessions (post-reset recovery)
+      let finalSystemPrompt = systemPromptText;
+      if (session.messages.length === 0) {
+        try {
+          const { loadCompactionSummaries } = await import("../../../mind-theory/index.js");
+          const summaryContext = await loadCompactionSummaries(effectiveWorkspace);
+          if (summaryContext) {
+            finalSystemPrompt += "\n\n" + summaryContext;
+            console.log("[mind-theory] injected compaction summaries into fresh session");
+          }
+        } catch (err) {
+          console.log(`[mind-theory] failed to load compaction summaries: ${String(err)}`);
+        }
+      }
+      applySystemPromptOverrideToSession(session, finalSystemPrompt);
       if (!session) {
         throw new Error("Embedded agent session missing");
       }

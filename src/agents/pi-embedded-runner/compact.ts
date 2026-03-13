@@ -457,6 +457,21 @@ export async function compactEmbeddedPiSessionDirect(
         }
 
         const result = await session.compact(params.customInstructions);
+
+        // Write compaction summary for session-reset recovery
+        if (result.summary) {
+          try {
+            const { writeCompactionSummary } = await import("../../mind-theory/index.js");
+            await writeCompactionSummary({
+              sessionKey: params.sessionKey ?? params.sessionId,
+              workspaceDir: effectiveWorkspace,
+              summary: result.summary,
+            });
+          } catch (err) {
+            console.log(`[mind-theory] compaction summary write failed: ${String(err)}`);
+          }
+        }
+
         // Estimate tokens after compaction by summing token estimates for remaining messages
         let tokensAfter: number | undefined;
         try {
