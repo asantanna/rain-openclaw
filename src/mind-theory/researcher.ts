@@ -18,7 +18,7 @@ export type ResearcherParams = {
   config?: OpenClawConfig;
 };
 
-export type EvokedMemory = { fact: string; score: number };
+export type EvokedMemory = { fact: string; score: number; created_at?: number };
 
 // ---------------------------------------------------------------------------
 // Daemon singleton state
