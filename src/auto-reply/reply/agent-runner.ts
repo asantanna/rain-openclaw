@@ -408,22 +408,26 @@ export async function runReplyAgent(params: {
         promptTokens,
       });
 
-      // Mind-theory: reset idle compaction timer after each agent run
-      try {
-        const { resetIdleTimer } = await import("../../mind-theory/index.js");
-        resetIdleTimer(
-          sessionKey,
-          {
-            sessionFile: followupRun.run.sessionFile,
-            config: cfg,
-            provider: followupRun.run.provider,
-            model: followupRun.run.model,
-            workspaceDir: followupRun.run.workspaceDir,
-          },
-          cfg,
-        );
-      } catch {
-        // Mind-theory module load failure — non-critical
+      // Mind-theory: reset idle compaction timer only for external messages
+      // (not heartbeats/cron). This ensures compaction fires once after
+      // human/AI conversation goes quiet, then stops until new input arrives.
+      if (!isHeartbeat) {
+        try {
+          const { resetIdleTimer } = await import("../../mind-theory/index.js");
+          resetIdleTimer(
+            sessionKey,
+            {
+              sessionFile: followupRun.run.sessionFile,
+              config: cfg,
+              provider: followupRun.run.provider,
+              model: followupRun.run.model,
+              workspaceDir: followupRun.run.workspaceDir,
+            },
+            cfg,
+          );
+        } catch {
+          // Mind-theory module load failure — non-critical
+        }
       }
 
       // Mind-theory: async researcher — log-only mode (fire-and-forget).
