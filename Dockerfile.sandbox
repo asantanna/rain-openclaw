@@ -1,4 +1,4 @@
-FROM debian:bookworm-slim
+FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -15,8 +15,9 @@ RUN apt-get update \
     ripgrep \
   && rm -rf /var/lib/apt/lists/*
 
+ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cu130
 RUN python3 -m pip install --break-system-packages --no-cache-dir \
-    torch --index-url https://download.pytorch.org/whl/cpu \
+    torch --index-url ${TORCH_INDEX_URL} \
   && python3 -m pip install --break-system-packages --no-cache-dir \
     numpy scipy
 

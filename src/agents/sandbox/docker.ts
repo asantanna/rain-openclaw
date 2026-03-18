@@ -298,6 +298,9 @@ export function buildSandboxCreateArgs(params: {
       args.push("-v", bind);
     }
   }
+  if (params.cfg.gpus) {
+    args.push("--gpus", params.cfg.gpus);
+  }
   return args;
 }
 

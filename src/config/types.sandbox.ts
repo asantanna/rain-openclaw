@@ -42,6 +42,8 @@ export type SandboxDockerSettings = {
   extraHosts?: string[];
   /** Additional bind mounts (host:container:mode format, e.g. ["/host/path:/container/path:rw"]). */
   binds?: string[];
+  /** GPU access (e.g. "all", "0", "0,1"). Requires NVIDIA Container Toolkit. */
+  gpus?: string;
 };
 
 export type SandboxBrowserSettings = {
