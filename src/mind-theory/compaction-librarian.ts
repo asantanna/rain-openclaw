@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, basename } from "node:path";
 import type { OpenClawConfig } from "../config/types.js";
 import { resolveAgentIdFromSessionKey } from "../routing/session-key.js";
 import {
@@ -54,9 +54,11 @@ export async function mindTheoryBeforeCompaction(
     return { role: m.role ?? "unknown", content };
   });
 
+  const sessionFileUuid = basename(params.sessionFile, ".jsonl");
   const stdinData = JSON.stringify({
     messages: simplifiedMessages,
     session_key: params.sessionKey,
+    session_file: sessionFileUuid,
     agent_id: agentId,
     agent_name: agentName,
     db_path: dbPath,

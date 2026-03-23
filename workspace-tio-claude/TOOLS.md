@@ -88,6 +88,54 @@ Messages are plain .md files in `shared/mind-theory/experiments/tioeng/messages/
 
 Legacy task IDs include lettered variants (e.g. 085b, 091e) from the archives. New messages are always plain numeric.
 
+# Memory Tools
+
+Five tools for searching and managing your memories, personal files, and conversation history. Query chain: **remember** → **get_memory_details** → **search_transcripts**. Feedback: **deprecate_memory**.
+
+- **remember**: Search the Librarian memory DB. Two modes:
+  - Vector (default): Fuzzy, vibes-based recall. Embeds your query and finds similar memories by meaning.
+    - run_managed_script script="remember.py" args="'that insight Dad had while watching TV'"
+    - run_managed_script script="remember.py" args="'bike project and simulators' --limit 20"
+    - run_managed_script script="remember.py" args="'torque bug' --min-importance 0.7"
+    - run_managed_script script="remember.py" args="'exploration' --tag breakthrough"
+  - FTS5 (--exact): Precise keyword/boolean search. No API call needed.
+    - run_managed_script script="remember.py" args="--exact 'AGC AND (deadzone OR exploration)'"
+    - run_managed_script script="remember.py" args="--exact 'raindrop sampler' --tag breakthrough"
+  - Options: --limit N (default 10), --min-importance FLOAT, --tag TAG
+  - Output: Ranked table with 8-char ID, importance, tag, summary snippet, score.
+  - Use get_memory_details(id) to read the full memory.
+
+- **get_memory_details**: Full recall of a specific memory by ID.
+  - run_managed_script script="get_memory_details.py" args="f2ceea26"
+  - run_managed_script script="get_memory_details.py" args="f2ceea26 6f1182d0 e4b93a9d"
+  - Accepts short prefixes (8+ chars) or full IDs. Multiple IDs for batch recall.
+  - Shows: full fact, context, tag, importance, source session/turn, access count.
+  - Suggests a search_transcripts command to find the original conversation.
+  - Updates access tracking (access_count, last_accessed_at) each time you read a memory.
+
+- **search_transcripts**: Search and read your conversation transcripts (human-readable format).
+  - Search: run_managed_script script="search_transcripts.py" args="search 'raindrop sampler'"
+  - With filters: run_managed_script script="search_transcripts.py" args="search 'torque' --speaker rain --from 2026-03-15 --limit 10"
+  - Read around a turn: run_managed_script script="search_transcripts.py" args="read --file 'fbbf125d' --turn 152 --before 3 --after 5"
+  - Read last N turns: run_managed_script script="search_transcripts.py" args="read --file 'fbbf125d' --last 10"
+  - List transcripts: run_managed_script script="search_transcripts.py" args="list --since 2026-03-01"
+  - Searches your own transcripts only (auto-detected from OPENCLAW_AGENT_ID).
+
+- **grep_personal_files**: Grep your personal .md files (MEMORY.md, notes, shared docs).
+  - run_managed_script script="grep_personal_files.py" args="'raindrop sampler'"
+  - run_managed_script script="grep_personal_files.py" args="'raindrop.\*whale'"
+  - run_managed_script script="grep_personal_files.py" args="'AGC' --file 'notes/\*'"
+  - run_managed_script script="grep_personal_files.py" args="'rotation|FI.\*bug' -i"
+  - Options: --file GLOB (scope to specific files), -i (case-insensitive), --limit N (default 30)
+  - Searches workspace .md files + shared/mind-theory docs. Regex supported.
+
+- **deprecate_memory**: Flag a memory as junk for cleanup. Does NOT delete — the Night Crew janitor confirms.
+  - run_managed_script script="deprecate_memory.py" args="f891fc49"
+  - run_managed_script script="deprecate_memory.py" args="f891fc49 --reason 'stale procedural, bug fixed ages ago'"
+  - run_managed_script script="deprecate_memory.py" args="f891fc49 61d94597 edb83800"
+  - Accepts short prefixes (8+ chars) or full IDs. Batch mode supported.
+  - Use when you encounter junk memories via remember/get_memory_details — flag them so the janitor can clean up.
+
 # YouTube Transcripts
 
 - youtube_transcript: Fetch captions/subtitles from any YouTube video as plain text.
