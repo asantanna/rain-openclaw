@@ -113,6 +113,15 @@ function findPeerAgentBindings(
     if (!accountId) {
       continue;
     }
+    // Skip peers whose account has groupPolicy disabled — they opted out of groups.
+    if (normalizedChannel === "telegram") {
+      const acctCfg = cfg.channels?.telegram?.accounts?.[accountId];
+      const acctGroupPolicy = acctCfg?.groupPolicy ?? cfg.channels?.telegram?.groupPolicy;
+      if (acctGroupPolicy === "disabled") {
+        continue;
+      }
+    }
+
     seen.add(agentId);
     peers.push({ agentId, accountId });
   }
