@@ -1,4 +1,5 @@
 export { mindTheoryBeforeCompaction } from "./compaction-librarian.js";
+export { generateReadableTranscript } from "./transcript-to-text.js";
 export { loadCompactionSummaries, writeCompactionSummary } from "./compaction-summarizer.js";
 export { isResearcherInjectEnabled } from "./config.js";
 export { resetIdleTimer } from "./idle-compaction.js";

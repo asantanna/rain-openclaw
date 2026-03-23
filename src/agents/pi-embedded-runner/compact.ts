@@ -456,6 +456,19 @@ export async function compactEmbeddedPiSessionDirect(
           console.log(`[mind-theory] before-compaction failed: ${String(err)}`);
         }
 
+        // Generate readable transcript (fire-and-forget)
+        try {
+          const { generateReadableTranscript } = await import("../../mind-theory/index.js");
+          generateReadableTranscript({
+            sessionKey: params.sessionKey ?? params.sessionId,
+            sessionFile: params.sessionFile,
+          }).catch((err: unknown) => {
+            console.log(`[mind-theory] transcript generation failed: ${String(err)}`);
+          });
+        } catch (err) {
+          console.log(`[mind-theory] transcript import failed: ${String(err)}`);
+        }
+
         const result = await session.compact(params.customInstructions);
 
         // Write compaction summary for session-reset recovery
