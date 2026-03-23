@@ -8,7 +8,8 @@ import { jsonResult, readStringParam } from "./common.js";
 
 const MANAGED_SCRIPTS_DIR = path.join(CONFIG_DIR, "managed_scripts");
 const MANAGED_SCRIPTS_VENV_PYTHON = path.join(MANAGED_SCRIPTS_DIR, ".venv", "bin", "python3");
-const TIMEOUT_MS = 30_000;
+const DEFAULT_TIMEOUT_MS = 30_000;
+const MAX_TIMEOUT_MS = 300_000;
 const MAX_OUTPUT = 50 * 1024;
 
 const INTERPRETER_MAP: Record<string, string> = {
@@ -22,6 +23,12 @@ const RunManagedScriptSchema = Type.Object({
   script: Type.String({ description: "Script filename (e.g. 'read_session.py')" }),
   args: Type.Optional(
     Type.String({ description: "Arguments (e.g. 'list --agent rain --active 60')" }),
+  ),
+  timeout: Type.Optional(
+    Type.Number({
+      description:
+        "Timeout in seconds (default: 30, max: 300). Use higher values for scripts that call external APIs.",
+    }),
   ),
 });
 
@@ -95,6 +102,9 @@ export function createRunManagedScriptTool(options?: { agentId?: string }): AnyA
       const params = rawParams as Record<string, unknown>;
       const scriptName = readStringParam(params, "script", { required: true });
       const argsStr = readStringParam(params, "args") ?? "";
+      const timeoutSec = typeof params.timeout === "number" ? params.timeout : 0;
+      const timeoutMs =
+        timeoutSec > 0 ? Math.min(timeoutSec * 1000, MAX_TIMEOUT_MS) : DEFAULT_TIMEOUT_MS;
 
       validateScriptName(scriptName);
 
@@ -129,7 +139,7 @@ export function createRunManagedScriptTool(options?: { agentId?: string }): AnyA
           cmd,
           cmdArgs,
           {
-            timeout: TIMEOUT_MS,
+            timeout: timeoutMs,
             maxBuffer: MAX_OUTPUT * 2,
             env: {
               ...process.env,

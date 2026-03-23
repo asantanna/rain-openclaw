@@ -38,8 +38,10 @@ You're sandboxed — similar to Rain's infancy lockdown, plus web search. Move c
 # Managed Scripts
 
 - run_managed_script: Run a pre-approved script from the managed_scripts directory.
-  - Parameters: script (filename), args (arguments string)
+  - Parameters: script (filename), args (arguments string), timeout (seconds, optional)
+  - Default timeout: 30 seconds. Max: 300 seconds. Use higher values for scripts that call external APIs.
   - Example: run_managed_script script="read_session.py" args="list --agent rain"
+  - Example with timeout: run_managed_script script="night_crew_janitor.py" args="--smoke-test" timeout=120
   - Safety: Only scripts placed by André can run. You cannot modify the scripts directory.
   - See your skills (e.g. session_reader) for specific scripts and usage examples.
 
