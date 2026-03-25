@@ -1,4 +1,6 @@
 import type { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
+import fs from "node:fs/promises";
+import path from "node:path";
 import type { EmbeddedPiSubscribeContext } from "./pi-embedded-subscribe.handlers.types.js";
 import { parseReplyDirectives } from "../auto-reply/reply/reply-directives.js";
 import { emitAgentEvent } from "../infra/agent-events.js";
@@ -16,6 +18,115 @@ import {
   formatReasoningMessage,
   promoteThinkingTagsToBlocks,
 } from "./pi-embedded-utils.js";
+
+// ── Duplicate-output forensic logging ──────────────────────────────────
+// Detects when the model internally repeats a paragraph within a single
+// reply, then dumps the full prompt context for root-cause analysis.
+
+const DUP_FORENSIC_DIR = path.join(process.env.HOME ?? "/tmp", ".openclaw/debug/dup-forensics");
+const MIN_WORDS_FOR_CHECK = 20; // don't flag very short replies
+const MIN_DEDUP_CHARS = 40; // minimum text length to attempt dedup
+
+/**
+ * If every non-trivial word in the text appears at least twice,
+ * the message is almost certainly internally duplicated.
+ */
+function detectInternalRepetition(text: string): boolean {
+  const words = text.toLowerCase().match(/[a-z]{4,}/g);
+  if (!words || words.length < MIN_WORDS_FOR_CHECK) {
+    return false;
+  }
+  const counts = new Map<string, number>();
+  for (const w of words) {
+    counts.set(w, (counts.get(w) ?? 0) + 1);
+  }
+  // Every distinct word appears ≥2 times → duplicated
+  for (const count of counts.values()) {
+    if (count < 2) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * If `text` is the same content repeated (exact-half or paragraph-level),
+ * return the deduplicated version. Otherwise return null (no dedup needed).
+ */
+function deduplicateRepeatedText(text: string): string | null {
+  const trimmed = text.trim();
+  if (trimmed.length < MIN_DEDUP_CHARS) {
+    return null;
+  }
+
+  // Strategy 1: exact-half split (most common pattern from Opus 4.6)
+  // Try splitting on double-newline near the midpoint
+  const mid = Math.floor(trimmed.length / 2);
+  // Search for a double-newline within ±10% of midpoint
+  const searchStart = Math.floor(mid * 0.85);
+  const searchEnd = Math.ceil(mid * 1.15);
+  const candidates = [];
+  let idx = trimmed.indexOf("\n\n", searchStart);
+  while (idx >= 0 && idx <= searchEnd) {
+    candidates.push(idx);
+    idx = trimmed.indexOf("\n\n", idx + 1);
+  }
+
+  for (const splitAt of candidates) {
+    const first = trimmed.slice(0, splitAt).trim();
+    const second = trimmed.slice(splitAt).trim();
+    if (first && second && first === second) {
+      // Preserve original leading whitespace
+      const leadingWs = text.match(/^\s*/)?.[0] ?? "";
+      return leadingWs + first;
+    }
+  }
+
+  return null;
+}
+
+function dumpDupForensic(ctx: EmbeddedPiSubscribeContext, rawText: string, reason: string): void {
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const sessionId = (ctx.params.session as { id?: string }).id ?? "unknown";
+  const dumpPath = path.join(DUP_FORENSIC_DIR, `${ts}_${sessionId}.json`);
+
+  let messages: unknown[];
+  try {
+    messages = ctx.params.session.messages.map((m) => {
+      const rec = m as unknown as Record<string, unknown>;
+      const content = rec.content;
+      return {
+        role: rec.role,
+        content:
+          typeof content === "string"
+            ? content.slice(0, 4000)
+            : Array.isArray(content)
+              ? (content as Record<string, unknown>[]).map((b) =>
+                  b.type === "text"
+                    ? { ...b, text: ((b.text as string) ?? "").slice(0, 4000) }
+                    : { type: b.type, _truncated: true },
+                )
+              : content,
+      };
+    });
+  } catch {
+    messages = [{ error: "failed to serialize messages" }];
+  }
+
+  const payload = {
+    timestamp: new Date().toISOString(),
+    sessionId,
+    runId: ctx.params.runId,
+    reason,
+    rawAssistantText: rawText.slice(0, 8000),
+    promptMessages: messages,
+  };
+
+  fs.mkdir(DUP_FORENSIC_DIR, { recursive: true })
+    .then(() => fs.writeFile(dumpPath, JSON.stringify(payload, null, 2)))
+    .then(() => console.log(`[dup-forensic] Model repeated itself — dumped to ${dumpPath}`))
+    .catch((err) => console.log(`[dup-forensic] Failed to write: ${String(err)}`));
+}
 
 const stripTrailingDirective = (text: string): string => {
   const openIndex = text.lastIndexOf("[[");
@@ -210,9 +321,49 @@ export function handleMessageEnd(
 
   const assistantMessage = msg;
   ctx.recordAssistantUsage((assistantMessage as { usage?: unknown }).usage);
+
+  // ── Layer-0 dup probe: check raw message BEFORE any processing ──
+  // If duplication exists here, it came from the API/SDK/agent-core layer.
+  // If NOT here but detected later by deduplicateRepeatedText(), it's our code.
+  const rawPreProcess = extractAssistantText(assistantMessage);
+  if (detectInternalRepetition(rawPreProcess)) {
+    const sessionId = (ctx.params.session as { id?: string }).id ?? "unknown";
+    console.log(
+      `[dup-layer0] Duplication detected in RAW message from API/SDK ` +
+        `(${rawPreProcess.length} chars) ` +
+        `session=${sessionId} runId=${ctx.params.runId}`,
+    );
+  }
+
   promoteThinkingTagsToBlocks(assistantMessage);
 
-  const rawText = extractAssistantText(assistantMessage);
+  let rawText = extractAssistantText(assistantMessage);
+
+  // ── Repetition dedup (layer 1) ──
+  // Root cause unknown. Fix before persistence to keep session history clean.
+  const dedupedText = deduplicateRepeatedText(rawText);
+  if (dedupedText !== null) {
+    const sessionId = (ctx.params.session as { id?: string }).id ?? "unknown";
+    console.log(
+      `[dup-dedup] Stripped repeated text in assistant reply ` +
+        `(${rawText.length} → ${dedupedText.length} chars) ` +
+        `session=${sessionId} runId=${ctx.params.runId}`,
+    );
+    // Also fix any assistantTexts already pushed during streaming
+    for (let i = ctx.state.assistantTextBaseline; i < ctx.state.assistantTexts.length; i++) {
+      const fixed = deduplicateRepeatedText(ctx.state.assistantTexts[i]);
+      if (fixed !== null) {
+        ctx.state.assistantTexts[i] = fixed;
+      }
+    }
+    rawText = dedupedText;
+  }
+
+  // Forensic: if still duplicated after dedup attempt, dump for analysis
+  if (detectInternalRepetition(rawText)) {
+    dumpDupForensic(ctx, rawText, "all-words-repeated");
+  }
+
   appendRawStream({
     ts: Date.now(),
     event: "assistant_message_end",

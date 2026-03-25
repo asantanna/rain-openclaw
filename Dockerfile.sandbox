@@ -19,7 +19,7 @@ ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cu130
 RUN python3 -m pip install --break-system-packages --no-cache-dir \
     torch --index-url ${TORCH_INDEX_URL} \
   && python3 -m pip install --break-system-packages --no-cache-dir \
-    numpy scipy
+    numpy scipy matplotlib
 
 RUN useradd --create-home --shell /bin/bash sandbox
 USER sandbox
