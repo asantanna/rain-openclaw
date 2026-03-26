@@ -125,8 +125,12 @@ Five tools for searching and managing your memories, personal files, and convers
   - With filters: run_managed_script script="search_transcripts.py" args="search 'torque' --speaker rain --from 2026-03-15 --limit 10"
   - Read around a turn: run_managed_script script="search_transcripts.py" args="read --file 'fbbf125d' --turn 152 --before 3 --after 5"
   - Read last N turns: run_managed_script script="search_transcripts.py" args="read --file 'fbbf125d' --last 10"
+  - Read by time range: run_managed_script script="search_transcripts.py" args="read --from '2026-03-25 12:14 AM' --to '2026-03-25 1:30 AM'"
+  - Read a whole day: run_managed_script script="search_transcripts.py" args="read --from '2026-03-25' --to '2026-03-25'"
+  - Time range with file: run_managed_script script="search_transcripts.py" args="read --file 'fbbf125d' --from '2026-03-25 12:14 AM'"
   - List transcripts: run_managed_script script="search_transcripts.py" args="list --since 2026-03-01"
   - Searches your own transcripts only (auto-detected from OPENCLAW_AGENT_ID).
+  - --file is optional with --from/--to — auto-finds the right transcript(s).
 
 - **grep_personal_files**: Grep your personal .md files (MEMORY.md, journal, scratchpad, shared docs).
   - run_managed_script script="grep_personal_files.py" args="'raindrop sampler'"
