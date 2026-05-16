@@ -1,6 +1,7 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { estimateTokens, generateSummary } from "@mariozechner/pi-coding-agent";
+import { estimateTokens } from "@mariozechner/pi-coding-agent";
+import { trackedGenerateSummary } from "../rain-changes/spend-tracker-compact.js";
 import { DEFAULT_CONTEXT_TOKENS } from "./defaults.js";
 import { repairToolUseResultPairing } from "./session-transcript-repair.js";
 
@@ -178,7 +179,7 @@ async function summarizeChunks(params: {
   let summary = params.previousSummary;
 
   for (const chunk of chunks) {
-    summary = await generateSummary(
+    summary = await trackedGenerateSummary(
       chunk,
       params.model,
       params.reserveTokens,

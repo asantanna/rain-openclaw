@@ -10,6 +10,7 @@ import { resolveChannelCapabilities } from "../../../config/channel-capabilities
 import { getMachineDisplayName } from "../../../infra/machine-name.js";
 import { MAX_IMAGE_BYTES } from "../../../media/constants.js";
 import { getGlobalHookRunner } from "../../../plugins/hook-runner-global.js";
+import { recordSpend } from "../../../rain-changes/spend-tracker.js";
 import { isSubagentSessionKey, normalizeAgentId } from "../../../routing/session-key.js";
 import { resolveSignalReactionLevel } from "../../../signal/reaction-level.js";
 import { resolveTelegramInlineButtonsScope } from "../../../telegram/inline-buttons.js";
@@ -886,6 +887,13 @@ export async function runEmbeddedAttempt(
           note: promptError ? "prompt error" : undefined,
         });
         anthropicPayloadLogger?.recordUsage(messagesSnapshot, promptError);
+        recordSpend(messagesSnapshot, {
+          runId: params.runId,
+          sessionId: params.sessionId,
+          sessionKey: params.sessionKey,
+          provider: params.provider,
+          modelId: params.modelId,
+        });
 
         // Run agent_end hooks to allow plugins to analyze the conversation
         // This is fire-and-forget, so we don't await
