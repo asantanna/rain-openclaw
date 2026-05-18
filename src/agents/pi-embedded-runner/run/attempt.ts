@@ -10,6 +10,7 @@ import { resolveChannelCapabilities } from "../../../config/channel-capabilities
 import { getMachineDisplayName } from "../../../infra/machine-name.js";
 import { MAX_IMAGE_BYTES } from "../../../media/constants.js";
 import { getGlobalHookRunner } from "../../../plugins/hook-runner-global.js";
+import { recordSizes } from "../../../rain-changes/size-tracker.js";
 import { recordSpend } from "../../../rain-changes/spend-tracker.js";
 import { isSubagentSessionKey, normalizeAgentId } from "../../../routing/session-key.js";
 import { resolveSignalReactionLevel } from "../../../signal/reaction-level.js";
@@ -893,6 +894,16 @@ export async function runEmbeddedAttempt(
           sessionKey: params.sessionKey,
           provider: params.provider,
           modelId: params.modelId,
+        });
+        recordSizes({
+          runId: params.runId,
+          sessionKey: params.sessionKey,
+          provider: params.provider,
+          modelId: params.modelId,
+          systemPrompt: finalSystemPrompt,
+          systemPromptBase: systemPromptText,
+          tools,
+          messages: messagesSnapshot,
         });
 
         // Run agent_end hooks to allow plugins to analyze the conversation
