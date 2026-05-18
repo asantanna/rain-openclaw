@@ -422,18 +422,39 @@ export function createImageTool(options?: {
         }
         return imageRaw;
       })();
-      const resolvedPathInfo: { resolved: string; rewrittenFrom?: string } = isDataUrl
-        ? { resolved: "" }
-        : sandboxConfig
-          ? await resolveSandboxedImagePath({
-              sandbox: sandboxConfig,
-              imagePath: resolvedImage,
-            })
-          : {
-              resolved: resolvedImage.startsWith("file://")
-                ? resolvedImage.slice("file://".length)
-                : resolvedImage,
-            };
+      let resolvedPathInfo: { resolved: string; rewrittenFrom?: string };
+      if (isDataUrl) {
+        resolvedPathInfo = { resolved: "" };
+      } else if (sandboxConfig) {
+        try {
+          resolvedPathInfo = await resolveSandboxedImagePath({
+            sandbox: sandboxConfig,
+            imagePath: resolvedImage,
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          // image()'s sandbox check is stricter than read()'s — read() knows
+          // about shared-mount paths (e.g. /workspace/shared/...) and loads
+          // the image into the agent's own context where it can describe it
+          // directly (the agent is itself a vision model in our setup).
+          if (msg.includes("escapes sandbox")) {
+            throw new Error(
+              `image() can't reach that path through its sandbox check. ` +
+                `Use the read() tool instead — it understands shared-mount ` +
+                `paths and loads the image into your context where you can ` +
+                `describe/analyze it directly.`,
+              { cause: err },
+            );
+          }
+          throw err;
+        }
+      } else {
+        resolvedPathInfo = {
+          resolved: resolvedImage.startsWith("file://")
+            ? resolvedImage.slice("file://".length)
+            : resolvedImage,
+        };
+      }
       const resolvedPath = isDataUrl ? null : resolvedPathInfo.resolved;
 
       const media = isDataUrl
