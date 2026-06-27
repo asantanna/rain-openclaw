@@ -49,6 +49,10 @@ export const TelegramTopicSchema = z
 export const TelegramGroupSchema = z
   .object({
     requireMention: z.boolean().optional(),
+    /** Handles/names that count as mentioning this agent (e.g. "@tioeng_fam_bot").
+     * Used by the group relay to gate sibling-agent messages the same way the
+     * human @mention path gates humans. Falls back to the agent id/name. */
+    mentionAliases: z.array(z.string()).optional(),
     groupPolicy: GroupPolicySchema.optional(),
     tools: ToolPolicySchema,
     toolsBySender: ToolPolicyBySenderSchema,

@@ -140,6 +140,54 @@ function resolveAgentDisplayName(cfg: OpenClawConfig, agentId: string): string {
   return config?.name ?? agentId;
 }
 
+/**
+ * Honor a peer's group `requireMention` on the relay path too.
+ *
+ * The human inbound path gates on `requireMention`, but the agent-to-agent relay
+ * did not — so a peer with `requireMention: true` answered every sibling message
+ * instead of only when addressed. If the peer requires a mention in this group
+ * and the relayed text does not name it, return true so the caller injects the
+ * message passively (peer sees it for context, no reply triggered).
+ *
+ * Match handles are the group's configured `mentionAliases` (e.g.
+ * "@tioeng_fam_bot") so siblings address the agent by the same handle a human
+ * uses; falls back to the agent id / display name when none are configured. The
+ * leading "@" is stripped and matched on a word boundary (so "@tioeng_fam_bot"
+ * in the text matches an alias of "@tioeng_fam_bot" or "tioeng_fam_bot").
+ */
+function peerRequiresMentionButUnnamed(
+  cfg: OpenClawConfig,
+  channel: string,
+  peer: PeerAgent,
+  peerId: string,
+  text: string,
+): boolean {
+  if (channel.toLowerCase() !== "telegram") {
+    return false; // only telegram groups carry requireMention today
+  }
+  const groupCfg = cfg.channels?.telegram?.accounts?.[peer.accountId]?.groups?.[peerId];
+  if (groupCfg?.requireMention !== true) {
+    return false;
+  }
+  const configured = groupCfg.mentionAliases?.filter((a) => a.trim().length > 0);
+  const aliases =
+    configured && configured.length > 0
+      ? configured
+      : [peer.agentId, resolveAgentConfig(cfg, peer.agentId)?.name].filter(
+          (a): a is string => typeof a === "string" && a.trim().length > 0,
+        );
+  const haystack = text.toLowerCase();
+  const named = aliases.some((alias) => {
+    const needle = alias
+      .trim()
+      .toLowerCase()
+      .replace(/^@+/, "")
+      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return needle.length > 0 && new RegExp(`\\b${needle}\\b`).test(haystack);
+  });
+  return !named;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -248,7 +296,11 @@ export async function maybeRelayToGroupPeers(params: {
       peerId,
     });
 
-    if (currentDepth >= maxDepth) {
+    // Stay passive (see-but-don't-reply) when the loop is too deep, OR when the
+    // peer requires a mention in this group and this message doesn't name it.
+    const stayPassive =
+      currentDepth >= maxDepth || peerRequiresMentionButUnnamed(cfg, channel, peer, peerId, text);
+    if (stayPassive) {
       // Passive fallback: inject into transcript without triggering a run.
       await appendRelayMessageToSessionTranscript({
         agentId: peer.agentId,

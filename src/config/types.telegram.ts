@@ -158,6 +158,10 @@ export type TelegramTopicConfig = {
 
 export type TelegramGroupConfig = {
   requireMention?: boolean;
+  /** Handles/names that count as mentioning this agent in this group (e.g.
+   * "@tioeng_fam_bot"). The group relay uses these to gate sibling-agent
+   * messages just like the human @mention path. Falls back to agent id/name. */
+  mentionAliases?: string[];
   /** Per-group override for group message policy (open|disabled|allowlist). */
   groupPolicy?: GroupPolicy;
   /** Optional tool policy overrides for this group. */
