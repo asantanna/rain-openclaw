@@ -3,6 +3,10 @@ import type { ThinkLevel } from "../../auto-reply/thinking.js";
 import type { RunEmbeddedPiAgentParams } from "./run/params.js";
 import type { EmbeddedPiAgentMeta, EmbeddedPiRunResult } from "./types.js";
 import { enqueueCommandInLane } from "../../process/command-queue.js";
+import {
+  forwardToCairnOnPi,
+  isCairnRepeaterAgent,
+} from "../../rain-changes/cairn-repeater/forward.js";
 import { isMarkdownCapableMessageChannel } from "../../utils/message-channel.js";
 import { resolveOpenClawAgentDir } from "../agent-paths.js";
 import {
@@ -162,6 +166,12 @@ const toNormalizedUsage = (usage: UsageAccumulator) => {
 export async function runEmbeddedPiAgent(
   params: RunEmbeddedPiAgentParams,
 ): Promise<EmbeddedPiRunResult> {
+  // Cairn repeater: the registered `cairn` agent is a thin pipe — forward to
+  // the sovereign Cairn-on-Pi process instead of running the embedded brain.
+  if (isCairnRepeaterAgent(params)) {
+    return forwardToCairnOnPi(params);
+  }
+
   const sessionLane = resolveSessionLane(params.sessionKey?.trim() || params.sessionId);
   const globalLane = resolveGlobalLane(params.lane);
   const enqueueGlobal =
