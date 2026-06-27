@@ -470,6 +470,16 @@ export async function startGatewayServer(
 
   void cron.start().catch((err) => logCron.error(`failed to start: ${String(err)}`));
 
+  // Mind-theory: nightly scheduled compaction (no-op when nightly.enabled=false).
+  // Independent of the bedtime/idle-compaction path and of the librarian.
+  try {
+    const { startNightlyScheduler } = await import("../mind-theory/index.js");
+    startNightlyScheduler(cfgAtStart);
+  } catch (err) {
+    // Non-critical — mind-theory is opt-in machinery, gateway must boot regardless.
+    console.log(`[mind-theory] nightly scheduler start failed: ${String(err)}`);
+  }
+
   const execApprovalManager = new ExecApprovalManager();
   const execApprovalForwarder = createExecApprovalForwarder();
   const execApprovalHandlers = createExecApprovalHandlers(execApprovalManager, {

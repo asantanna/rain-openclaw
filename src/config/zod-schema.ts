@@ -112,6 +112,24 @@ const MindTheorySchema = z
     bedtime: z
       .object({
         idleMinutes: z.number().int().positive().optional(),
+        enabled: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+    nightly: z
+      .object({
+        enabled: z.boolean().optional(),
+        hour: z.number().int().min(0).max(23).optional(),
+        minute: z.number().int().min(0).max(59).optional(),
+        tz: z.string().optional(),
+        minIdleMinutes: z.number().int().nonnegative().optional(),
+        compact: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+    transcripts: z
+      .object({
+        enabled: z.boolean().optional(),
       })
       .strict()
       .optional(),

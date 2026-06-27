@@ -71,8 +71,10 @@ export function createGatewayCloseHandler(params: {
     params.cron.stop();
     params.heartbeatRunner.stop();
     try {
-      const { shutdownResearcherDaemon } = await import("../mind-theory/index.js");
+      const { shutdownResearcherDaemon, stopNightlyScheduler } =
+        await import("../mind-theory/index.js");
       shutdownResearcherDaemon();
+      stopNightlyScheduler();
     } catch {
       /* non-critical */
     }

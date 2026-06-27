@@ -456,15 +456,19 @@ export async function compactEmbeddedPiSessionDirect(
           console.log(`[mind-theory] before-compaction failed: ${String(err)}`);
         }
 
-        // Generate readable transcript (fire-and-forget)
+        // Generate readable transcript (fire-and-forget). Gated on its
+        // own config flag — independent of librarian state. Default ON.
         try {
-          const { generateReadableTranscript } = await import("../../mind-theory/index.js");
-          generateReadableTranscript({
-            sessionKey: params.sessionKey ?? params.sessionId,
-            sessionFile: params.sessionFile,
-          }).catch((err: unknown) => {
-            console.log(`[mind-theory] transcript generation failed: ${String(err)}`);
-          });
+          const { generateReadableTranscript, isTranscriptsEnabled } =
+            await import("../../mind-theory/index.js");
+          if (isTranscriptsEnabled(params.config)) {
+            generateReadableTranscript({
+              sessionKey: params.sessionKey ?? params.sessionId,
+              sessionFile: params.sessionFile,
+            }).catch((err: unknown) => {
+              console.log(`[mind-theory] transcript generation failed: ${String(err)}`);
+            });
+          }
         } catch (err) {
           console.log(`[mind-theory] transcript import failed: ${String(err)}`);
         }
