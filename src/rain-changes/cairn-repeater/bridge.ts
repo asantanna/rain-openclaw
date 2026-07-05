@@ -15,8 +15,15 @@ import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { WebSocket, WebSocketServer } from "ws";
+import { maybeRelayToGroupPeers } from "../../gateway/server-group-relay.js";
+import { buildAgentPeerSessionKey } from "../../routing/session-key.js";
+import { sendMessageTelegram } from "../../telegram/send.js";
 
 export const CAIRN_BRIDGE_PATH = "/cairn-bridge";
+
+/** Where Cairn's "@team" pings land — the Rain Tech Group — and the account that posts them. */
+const RAIN_TECH_GROUP_ID = "-5255152440";
+const CAIRN_ACCOUNT_ID = "cairn";
 
 export type CairnRequest = {
   id: string;
@@ -29,6 +36,16 @@ export type CairnRequest = {
 
 export type CairnReply = {
   id: string;
+  text: string;
+};
+
+/**
+ * Cairn-on-Pi → gateway "ping the team" frame (stopgap for the missing outbound
+ * tool). Sent when Cairn's reply @mentions a teammate; the gateway fans it out
+ * to the Rain Tech Group. No request `id` — it's unsolicited, not a reply.
+ */
+export type CairnGroupcast = {
+  kind: "groupcast";
   text: string;
 };
 
@@ -83,6 +100,15 @@ wss.on("connection", (ws: WebSocket) => {
       reply = JSON.parse(raw.toString("utf8")) as CairnReply;
     } catch {
       clog(`conn #${myId}: malformed reply frame`);
+      return;
+    }
+    // "@mention → team" stopgap: a groupcast is unsolicited (no request id), so
+    // handle it before the reply-routing path. Fire-and-forget.
+    if (
+      (reply as Partial<CairnGroupcast>)?.kind === "groupcast" &&
+      typeof reply?.text === "string"
+    ) {
+      void handleGroupcast(reply.text, myId);
       return;
     }
     if (!reply?.id) {
@@ -179,4 +205,47 @@ export function sendToCairn(
     );
     connection.send(JSON.stringify(frame));
   });
+}
+
+/**
+ * Fan a Cairn-on-Pi groupcast out to the Rain Tech Group: humans see it via
+ * Telegram (posted as Cairn's bot), sibling agents receive it via the group
+ * relay. Fire-and-forget — a failure here must never wedge the socket, so each
+ * leg is independently guarded and errors are only logged.
+ *
+ * Loop-safety: the relay runs with a fresh runId (treated as human-originated,
+ * depth reset), and the TUI never groupcasts a group-origin turn — so a peer
+ * answering "@tioeng_fam_bot …" comes back as a normal group turn, not a second
+ * groupcast. The maxDepth cap backs this up.
+ */
+async function handleGroupcast(text: string, connId: number): Promise<void> {
+  const trimmed = text?.trim();
+  if (!trimmed) {
+    clog(`conn #${connId}: groupcast ignored (empty)`);
+    return;
+  }
+  clog(`conn #${connId}: groupcast → ${RAIN_TECH_GROUP_ID} len=${trimmed.length}`);
+  try {
+    await sendMessageTelegram(RAIN_TECH_GROUP_ID, trimmed, { accountId: CAIRN_ACCOUNT_ID });
+  } catch (err) {
+    clog(
+      `conn #${connId}: groupcast telegram send failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  try {
+    await maybeRelayToGroupPeers({
+      sessionKey: buildAgentPeerSessionKey({
+        agentId: CAIRN_ACCOUNT_ID,
+        channel: "telegram",
+        peerKind: "group",
+        peerId: RAIN_TECH_GROUP_ID,
+      }),
+      text: trimmed,
+      runId: randomUUID(),
+    });
+  } catch (err) {
+    clog(
+      `conn #${connId}: groupcast relay failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
