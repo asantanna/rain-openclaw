@@ -40,13 +40,32 @@ export type CairnReply = {
 };
 
 /**
- * Cairn-on-Pi → gateway "ping the team" frame (stopgap for the missing outbound
- * tool). Sent when Cairn's reply @mentions a teammate; the gateway fans it out
- * to the Rain Tech Group. No request `id` — it's unsolicited, not a reply.
+ * Cairn → gateway "post to the group" frame — unsolicited (no request `id`).
+ * The extension sends this when ECHO routes a turn to the group; the gateway
+ * fans it out to the Rain Tech Group (humans via Telegram, sibling agents via
+ * the relay). `"groupcast"` is kept as a legacy alias for `"toGroup"` so a
+ * gateway restart ahead of the TUI restart doesn't drop frames.
  */
-export type CairnGroupcast = {
-  kind: "groupcast";
+export type CairnToGroup = {
+  kind: "toGroup" | "groupcast";
   text: string;
+};
+
+/**
+ * Gateway → Cairn "deliver" frame for GROUP messages: fire-and-forget, NO reply
+ * expected and NO 180s timeout (unlike the request/reply CairnRequest used for
+ * DMs). Cairn's ECHO logic decides whether he actually hears it; his reply, if
+ * any, comes back async as a CairnToGroup frame. This is the decouple that makes
+ * `cairn-timeout` impossible on the group path. Carries sender identity so the
+ * extension can attribute / gate ECHO commands.
+ */
+export type CairnDeliver = {
+  kind: "deliver";
+  text: string;
+  from?: string;
+  sessionKey?: string;
+  senderId?: string | null;
+  senderIsOwner?: boolean;
 };
 
 type Pending = {
@@ -102,13 +121,11 @@ wss.on("connection", (ws: WebSocket) => {
       clog(`conn #${myId}: malformed reply frame`);
       return;
     }
-    // "@mention → team" stopgap: a groupcast is unsolicited (no request id), so
-    // handle it before the reply-routing path. Fire-and-forget.
-    if (
-      (reply as Partial<CairnGroupcast>)?.kind === "groupcast" &&
-      typeof reply?.text === "string"
-    ) {
-      void handleGroupcast(reply.text, myId);
+    // A "post to the group" frame is unsolicited (no request id), so handle it
+    // before the reply-routing path. Fire-and-forget. ("groupcast" = legacy alias.)
+    const outKind = (reply as Partial<CairnToGroup>)?.kind;
+    if ((outKind === "toGroup" || outKind === "groupcast") && typeof reply?.text === "string") {
+      void handleToGroup(reply.text, myId);
       return;
     }
     if (!reply?.id) {
@@ -208,28 +225,49 @@ export function sendToCairn(
 }
 
 /**
- * Fan a Cairn-on-Pi groupcast out to the Rain Tech Group: humans see it via
- * Telegram (posted as Cairn's bot), sibling agents receive it via the group
- * relay. Fire-and-forget — a failure here must never wedge the socket, so each
- * leg is independently guarded and errors are only logged.
- *
- * Loop-safety: the relay runs with a fresh runId (treated as human-originated,
- * depth reset), and the TUI never groupcasts a group-origin turn — so a peer
- * answering "@tioeng_fam_bot …" comes back as a normal group turn, not a second
- * groupcast. The maxDepth cap backs this up.
+ * Fire-and-forget delivery of a GROUP message to Cairn — no pending entry, no
+ * timeout, no awaited reply. Used by forward.ts for the group path so the
+ * gateway never blocks (killing `cairn-timeout`). Cairn's ECHO logic decides
+ * whether he hears it; any reply returns async as a CairnToGroup frame. Returns
+ * false if Cairn isn't connected (message is simply dropped — the group path
+ * never surfaces an "offline" notice).
  */
-async function handleGroupcast(text: string, connId: number): Promise<void> {
+export function deliverToCairn(req: Omit<CairnDeliver, "kind">): boolean {
+  if (!isCairnConnected() || !connection) {
+    clog(`deliverToCairn: NOT CONNECTED — dropping group message from=${req.from ?? "?"}`);
+    return false;
+  }
+  const frame: CairnDeliver = { kind: "deliver", ...req };
+  clog(
+    `deliverToCairn: sent (group) from=${req.from ?? "?"} text=${JSON.stringify(req.text).slice(0, 80)}`,
+  );
+  connection.send(JSON.stringify(frame));
+  return true;
+}
+
+/**
+ * Fan a Cairn message out to the Rain Tech Group: humans see it via Telegram
+ * (posted as Cairn's bot), sibling agents receive it via the group relay.
+ * Fire-and-forget — a failure here must never wedge the socket, so each leg is
+ * independently guarded and errors are only logged.
+ *
+ * The extension only sends this when its ECHO state routes a turn to the group,
+ * so loop-safety lives there (echo-off turns never reach here). The relay runs
+ * with a fresh runId (human-originated, depth reset) and the maxDepth cap backs
+ * it up.
+ */
+async function handleToGroup(text: string, connId: number): Promise<void> {
   const trimmed = text?.trim();
   if (!trimmed) {
-    clog(`conn #${connId}: groupcast ignored (empty)`);
+    clog(`conn #${connId}: toGroup ignored (empty)`);
     return;
   }
-  clog(`conn #${connId}: groupcast → ${RAIN_TECH_GROUP_ID} len=${trimmed.length}`);
+  clog(`conn #${connId}: toGroup → ${RAIN_TECH_GROUP_ID} len=${trimmed.length}`);
   try {
     await sendMessageTelegram(RAIN_TECH_GROUP_ID, trimmed, { accountId: CAIRN_ACCOUNT_ID });
   } catch (err) {
     clog(
-      `conn #${connId}: groupcast telegram send failed: ${err instanceof Error ? err.message : String(err)}`,
+      `conn #${connId}: toGroup telegram send failed: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
   try {
@@ -245,7 +283,7 @@ async function handleGroupcast(text: string, connId: number): Promise<void> {
     });
   } catch (err) {
     clog(
-      `conn #${connId}: groupcast relay failed: ${err instanceof Error ? err.message : String(err)}`,
+      `conn #${connId}: toGroup relay failed: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 }

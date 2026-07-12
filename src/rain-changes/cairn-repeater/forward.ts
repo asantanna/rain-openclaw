@@ -8,7 +8,7 @@
 
 import type { RunEmbeddedPiAgentParams } from "../../agents/pi-embedded-runner/run/params.js";
 import type { EmbeddedPiRunResult } from "../../agents/pi-embedded-runner/types.js";
-import { isCairnConnected, sendToCairn } from "./bridge.js";
+import { deliverToCairn, isCairnConnected, sendToCairn } from "./bridge.js";
 
 /** The registered repeater agent's id. */
 export const CAIRN_AGENT_ID = "cairn";
@@ -35,11 +35,37 @@ function fromLabel(params: RunEmbeddedPiAgentParams): string | undefined {
   return params.senderName?.trim() || undefined;
 }
 
-/** Forward the inbound to Cairn-on-Pi; return its reply as a run result. */
+/** True if this run originates from a group chat (vs a DM / A2A message). */
+function isGroupOrigin(params: RunEmbeddedPiAgentParams): boolean {
+  return (params.sessionKey ?? "").includes(":group:");
+}
+
+/**
+ * Forward the inbound to Cairn-on-Pi.
+ *
+ * GROUP path is decoupled: hand the message to Cairn's ECHO logic fire-and-forget
+ * and return SILENT immediately — no 180s wait, so `cairn-timeout` can't fire.
+ * Cairn's reply (only if ECHO is on) comes back async as a CairnToGroup frame.
+ *
+ * DM / A2A path is the unchanged request/reply (quick; preserves Rain→Cairn A2A,
+ * and the reply is delivered inline as the run result).
+ */
 export async function forwardToCairnOnPi(
   params: RunEmbeddedPiAgentParams,
 ): Promise<EmbeddedPiRunResult> {
   const started = Date.now();
+
+  if (isGroupOrigin(params)) {
+    deliverToCairn({
+      text: cleanBody(params.prompt),
+      from: fromLabel(params),
+      sessionKey: params.sessionKey,
+      senderId: params.senderId,
+      senderIsOwner: params.senderIsOwner,
+    });
+    return { payloads: [], meta: { durationMs: Date.now() - started } };
+  }
+
   if (!isCairnConnected()) {
     return {
       payloads: [{ text: "_(Cairn is offline right now — back shortly.)_" }],
