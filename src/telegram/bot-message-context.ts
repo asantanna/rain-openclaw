@@ -32,6 +32,7 @@ import { logVerbose, shouldLogVerbose } from "../globals.js";
 import { recordChannelActivity } from "../infra/channel-activity.js";
 import { buildPairingReply } from "../pairing/pairing-messages.js";
 import { upsertChannelPairingRequest } from "../pairing/pairing-store.js";
+import { isPeerEchoControlToSuppress } from "../rain-changes/cairn-repeater/control-commands.js";
 import { resolveAgentRoute } from "../routing/resolve-route.js";
 import { resolveThreadSessionKeys } from "../routing/session-key.js";
 import { withTelegramApiErrorLogging } from "./api-logging.js";
@@ -392,6 +393,12 @@ export const buildTelegramMessageContext = async ({
     rawBody = placeholder;
   }
   if (!rawBody && allMedia.length === 0) {
+    return null;
+  }
+  // rain-changes hook: bare Cairn ECHO control commands (@echo_on/off/status) are
+  // managed transparently in the group — drop them (no agent run) for every agent
+  // except the Cairn repeater, so they never pollute Rain's/Tio's context.
+  if (isPeerEchoControlToSuppress(route.agentId, rawBody)) {
     return null;
   }
 
