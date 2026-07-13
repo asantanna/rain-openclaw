@@ -56,6 +56,17 @@ export type CairnToGroup = {
 };
 
 /**
+ * Cairn → gateway "notify" frame: post a short state/feedback notice to the Rain
+ * Tech Group's HUMANS (Telegram) only — NOT relayed to peer agents, so ECHO
+ * state acks and @echo_status replies stay out of Rain/Tio's context. Lets André
+ * see state changes in the group without switching to the TUI.
+ */
+export type CairnNotify = {
+  kind: "notify";
+  text: string;
+};
+
+/**
  * Gateway → Cairn "deliver" frame for GROUP messages: fire-and-forget, NO reply
  * expected and NO 180s timeout (unlike the request/reply CairnRequest used for
  * DMs). Cairn's ECHO logic decides whether he actually hears it; his reply, if
@@ -125,11 +136,15 @@ wss.on("connection", (ws: WebSocket) => {
       clog(`conn #${myId}: malformed reply frame`);
       return;
     }
-    // A "post to the group" frame is unsolicited (no request id), so handle it
-    // before the reply-routing path. Fire-and-forget. ("groupcast" = legacy alias.)
-    const outKind = (reply as Partial<CairnToGroup>)?.kind;
+    // Unsolicited outbound frames (no request id) — handle before reply-routing.
+    const outKind = (reply as { kind?: string })?.kind;
     if ((outKind === "toGroup" || outKind === "groupcast") && typeof reply?.text === "string") {
       void handleToGroup(reply.text, myId);
+      return;
+    }
+    // "notify" — a feedback notice for the group's humans only (no agent relay).
+    if (outKind === "notify" && typeof reply?.text === "string") {
+      void handleNotify(reply.text, myId);
       return;
     }
     if (!reply?.id) {
@@ -329,5 +344,27 @@ async function handleToGroup(text: string, connId: number): Promise<void> {
     clog(
       `conn #${connId}: toGroup relay failed: ${err instanceof Error ? err.message : String(err)}`,
     );
+  }
+}
+
+/**
+ * Post a feedback notice to the group's HUMANS via Telegram only — NO relay to
+ * peer agents (unlike handleToGroup), so ECHO state acks / @echo_status replies
+ * don't land in Rain's or Tio's context. Chunked like any group post.
+ */
+async function handleNotify(text: string, connId: number): Promise<void> {
+  const trimmed = text?.trim();
+  if (!trimmed) {
+    return;
+  }
+  clog(`conn #${connId}: notify → ${RAIN_TECH_GROUP_ID} len=${trimmed.length}`);
+  for (const chunk of chunkForTelegram(trimmed)) {
+    try {
+      await sendMessageTelegram(RAIN_TECH_GROUP_ID, chunk, { accountId: CAIRN_ACCOUNT_ID });
+    } catch (err) {
+      clog(
+        `conn #${connId}: notify send failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 }
