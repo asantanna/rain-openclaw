@@ -24,6 +24,10 @@ export const CAIRN_BRIDGE_PATH = "/cairn-bridge";
 /** Where Cairn's "@team" pings land — the Rain Tech Group — and the account that posts them. */
 const RAIN_TECH_GROUP_ID = "-5255152440";
 const CAIRN_ACCOUNT_ID = "cairn";
+// Telegram's sendMessage hard-caps text at 4096 chars (and the send renders as
+// HTML, whose markup inflates the effective length), so chunk well under it.
+// Without this, a long/batched reply is silently rejected and never posts.
+const TELEGRAM_CHUNK_CHARS = 3800;
 
 export type CairnRequest = {
   id: string;
@@ -246,6 +250,38 @@ export function deliverToCairn(req: Omit<CairnDeliver, "kind">): boolean {
 }
 
 /**
+ * Split text into <=TELEGRAM_CHUNK_CHARS pieces, preferring paragraph, then line,
+ * then word boundaries — so a long/batched reply posts as several readable parts
+ * instead of being silently rejected by Telegram's 4096-char cap.
+ */
+function chunkForTelegram(text: string, max = TELEGRAM_CHUNK_CHARS): string[] {
+  if (text.length <= max) {
+    return [text];
+  }
+  const chunks: string[] = [];
+  let rest = text;
+  while (rest.length > max) {
+    const window = rest.slice(0, max);
+    let cut = window.lastIndexOf("\n\n");
+    if (cut < max * 0.5) {
+      cut = window.lastIndexOf("\n");
+    }
+    if (cut < max * 0.5) {
+      cut = window.lastIndexOf(" ");
+    }
+    if (cut <= 0) {
+      cut = max; // no boundary in range — hard cut
+    }
+    chunks.push(rest.slice(0, cut).trim());
+    rest = rest.slice(cut).trim();
+  }
+  if (rest) {
+    chunks.push(rest);
+  }
+  return chunks;
+}
+
+/**
  * Fan a Cairn message out to the Rain Tech Group: humans see it via Telegram
  * (posted as Cairn's bot), sibling agents receive it via the group relay.
  * Fire-and-forget — a failure here must never wedge the socket, so each leg is
@@ -263,12 +299,20 @@ async function handleToGroup(text: string, connId: number): Promise<void> {
     return;
   }
   clog(`conn #${connId}: toGroup → ${RAIN_TECH_GROUP_ID} len=${trimmed.length}`);
-  try {
-    await sendMessageTelegram(RAIN_TECH_GROUP_ID, trimmed, { accountId: CAIRN_ACCOUNT_ID });
-  } catch (err) {
-    clog(
-      `conn #${connId}: toGroup telegram send failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+  // Telegram rejects text > 4096 chars; chunk so long/batched replies still post
+  // (each chunk is a separate group message) instead of silently failing.
+  const chunks = chunkForTelegram(trimmed);
+  if (chunks.length > 1) {
+    clog(`conn #${connId}: toGroup split into ${chunks.length} chunks (len=${trimmed.length})`);
+  }
+  for (let i = 0; i < chunks.length; i++) {
+    try {
+      await sendMessageTelegram(RAIN_TECH_GROUP_ID, chunks[i], { accountId: CAIRN_ACCOUNT_ID });
+    } catch (err) {
+      clog(
+        `conn #${connId}: toGroup telegram send failed (chunk ${i + 1}/${chunks.length}): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
   try {
     await maybeRelayToGroupPeers({
