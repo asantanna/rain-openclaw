@@ -173,8 +173,11 @@ describe("image tool implicit imageModel config", () => {
       /Sandboxed image tool does not allow remote URLs/i,
     );
 
+    // A path that escapes the sandbox is still rejected; since commit 0fe45edfa
+    // the message is the friendlier "use read() instead" guidance rather than the
+    // raw "escapes sandbox root" text.
     await expect(tool.execute("t2", { image: "../escape.png" })).rejects.toThrow(
-      /escapes sandbox root/i,
+      /can't reach that path/i,
     );
   });
 
@@ -229,6 +232,64 @@ describe("image tool implicit imageModel config", () => {
 
     expect(fetch).toHaveBeenCalledTimes(1);
     expect((res.details as { rewrittenFrom?: string }).rewrittenFrom).toContain("photo.png");
+  });
+
+  it("loads a workspace image when the sandbox root is outside the default media roots", async () => {
+    // Production sandbox roots (~/.openclaw/workspace, agent workspaces) are NOT
+    // under the default local roots (tmp, ~/.openclaw/media, ~/.openclaw/agents),
+    // so unless image() passes the sandbox root as an allowed root, the media
+    // allow-check rejects every workspace image before it is read — the exact
+    // reason image() failed while read() worked. The other sandbox e2e tests
+    // hide this because mkdtemp roots under os.tmpdir(); and the test harness
+    // even points HOME at a /tmp subdir, so anything under tmp OR home is already
+    // an allowed root. Root under the repo (node_modules) so the guard bites.
+    const tmpBase = path.join(process.cwd(), "node_modules", ".openclaw-imgtest");
+    await fs.mkdir(tmpBase, { recursive: true });
+    const base = await fs.mkdtemp(`${tmpBase}${path.sep}root-`);
+    try {
+      const agentDir = path.join(base, "agent");
+      const sandboxRoot = path.join(base, "workspace");
+      await fs.mkdir(agentDir, { recursive: true });
+      await fs.mkdir(sandboxRoot, { recursive: true });
+      const pngB64 =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/woAAn8B9FD5fHAAAAAASUVORK5CYII=";
+      await fs.writeFile(path.join(sandboxRoot, "shot.png"), Buffer.from(pngB64, "base64"));
+
+      const fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        headers: new Headers(),
+        json: async () => ({
+          content: "ok",
+          base_resp: { status_code: 0, status_msg: "" },
+        }),
+      });
+      // @ts-expect-error partial global
+      global.fetch = fetch;
+      vi.stubEnv("MINIMAX_API_KEY", "minimax-test");
+
+      const cfg: OpenClawConfig = {
+        agents: {
+          defaults: {
+            model: { primary: "minimax/MiniMax-M2.1" },
+            imageModel: { primary: "minimax/MiniMax-VL-01" },
+          },
+        },
+      };
+      const sandbox = { root: sandboxRoot, bridge: createHostSandboxFsBridge(sandboxRoot) };
+      const tool = createImageTool({ config: cfg, agentDir, sandbox });
+      if (!tool) {
+        throw new Error("expected image tool");
+      }
+
+      // Reaching the model call (fetch) proves the allow-check passed and the
+      // image bytes were read via the bridge.
+      await tool.execute("t1", { prompt: "Describe.", image: "shot.png" });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      await fs.rm(tmpBase, { recursive: true, force: true });
+    }
   });
 });
 

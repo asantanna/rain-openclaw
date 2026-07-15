@@ -1,5 +1,6 @@
 import { type Api, type Context, complete, type Model } from "@mariozechner/pi-ai";
 import { Type } from "@sinclair/typebox";
+import os from "node:os";
 import path from "node:path";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { SandboxFsBridge } from "../sandbox/fs-bridge.js";
@@ -462,6 +463,19 @@ export function createImageTool(options?: {
         : sandboxConfig
           ? await loadWebMedia(resolvedPath ?? resolvedImage, {
               maxBytes,
+              // The resolved path is a HOST path under the sandbox workspace,
+              // but the default local roots don't include that dir (only tmp,
+              // ~/.openclaw/media, ~/.openclaw/agents) — so without this the
+              // allow-check rejects every workspace image before it's read.
+              // Mirror the native auto-embed path (run/images.ts) and add the
+              // sandbox root. Reads still go through the bridge (the container
+              // mount table is the real boundary).
+              localRoots: [
+                os.tmpdir(),
+                path.join(os.homedir(), ".openclaw", "media"),
+                path.join(os.homedir(), ".openclaw", "agents"),
+                sandboxConfig.root,
+              ],
               readFile: (filePath) =>
                 sandboxConfig.bridge.readFile({ filePath, cwd: sandboxConfig.root }),
             })
