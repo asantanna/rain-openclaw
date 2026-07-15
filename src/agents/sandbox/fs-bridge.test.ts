@@ -86,3 +86,60 @@ describe("sandbox fs bridge shell compatibility", () => {
     expect(scripts.some((script) => script.includes("pipefail"))).toBe(false);
   });
 });
+
+describe("sandbox fs bridge container-mount paths", () => {
+  const mounted: SandboxContext = {
+    ...sandbox,
+    workspaceDir: "/home/rain/.openclaw/workspace",
+    agentWorkspaceDir: "/home/rain/.openclaw/workspace",
+    docker: {
+      ...sandbox.docker,
+      binds: [
+        "/home/rain/.openclaw/shared:/workspace/shared:rw",
+        "/tmp:/workspace/tmp_host:rw",
+        "/home/rain/.openclaw/agents/rain:/workspace/agent-data:ro",
+      ],
+    },
+  };
+
+  it("resolves a container-absolute extra-mount path via the mount table", () => {
+    const bridge = createSandboxFsBridge({ sandbox: mounted });
+    const resolved = bridge.resolvePath({
+      filePath: "/workspace/tmp_host/team_discussion.md",
+    });
+    expect(resolved.containerPath).toBe("/workspace/tmp_host/team_discussion.md");
+    expect(resolved.relativePath).toBe("tmp_host/team_discussion.md");
+    // longest-prefix wins: the /workspace/tmp_host bind, not the workspace root.
+    expect(resolved.hostPath).toBe("/tmp/team_discussion.md");
+  });
+
+  it("maps a container path under the workspace root back to the host workspace", () => {
+    const bridge = createSandboxFsBridge({ sandbox: mounted });
+    const resolved = bridge.resolvePath({ filePath: "/workspace/self/scratchpad.md" });
+    expect(resolved.containerPath).toBe("/workspace/self/scratchpad.md");
+    expect(resolved.hostPath).toBe("/home/rain/.openclaw/workspace/self/scratchpad.md");
+  });
+
+  it("execs cat against the container path when reading an extra-mount file", async () => {
+    mockedExecDockerRaw.mockClear();
+    const bridge = createSandboxFsBridge({ sandbox: mounted });
+    await bridge.readFile({ filePath: "/workspace/tmp_host/foo.md" });
+    const [args] = mockedExecDockerRaw.mock.calls[0];
+    // last positional arg is the resolved container path handed to `cat -- "$1"`.
+    expect(args[args.length - 1]).toBe("/workspace/tmp_host/foo.md");
+  });
+
+  it("rejects a container path that climbs out of the workdir via ..", () => {
+    const bridge = createSandboxFsBridge({ sandbox: mounted });
+    expect(() => bridge.resolvePath({ filePath: "/workspace/tmp_host/../../etc/passwd" })).toThrow(
+      /escapes sandbox root/,
+    );
+  });
+
+  it("leaves plain relative paths resolving against the workspace root", () => {
+    const bridge = createSandboxFsBridge({ sandbox: mounted });
+    const resolved = bridge.resolvePath({ filePath: "notes.md" });
+    expect(resolved.containerPath).toBe("/workspace/notes.md");
+    expect(resolved.hostPath).toBe("/home/rain/.openclaw/workspace/notes.md");
+  });
+});

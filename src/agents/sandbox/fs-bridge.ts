@@ -222,6 +222,27 @@ function resolveSandboxFsPath(params: {
   filePath: string;
   cwd?: string;
 }): SandboxResolvedPath {
+  const workdir = params.sandbox.containerWorkdir;
+
+  // A container-absolute path (e.g. `/workspace/tmp_host/foo`) addresses the
+  // container's mount table directly. Those extra mounts (shared/, tmp_host/,
+  // agent-data/, …) live under the container workdir but map to host dirs that
+  // are OUTSIDE the host workspace, so forcing them through the host-relative
+  // check below rejects every one of them. Since every fs op here execs inside
+  // the container against `containerPath`, the mount table IS the access
+  // boundary: resolve these as container paths and let an unmounted path fail
+  // with a natural ENOENT. `..` segments are normalized away and re-checked, so
+  // a path cannot climb out of the workdir this way.
+  const containerAbs = asContainerAbsolutePath(params.filePath, workdir);
+  if (containerAbs) {
+    const relative = containerAbs === workdir ? "" : path.posix.relative(workdir, containerAbs);
+    return {
+      hostPath: mapContainerPathToHost(containerAbs, params.sandbox) ?? "",
+      relativePath: relative,
+      containerPath: containerAbs,
+    };
+  }
+
   const root = params.sandbox.workspaceDir;
   const cwd = params.cwd ?? root;
   const { resolved, relative } = resolveSandboxPath({
@@ -240,6 +261,74 @@ function resolveSandboxFsPath(params: {
     relativePath: normalizedRelative,
     containerPath,
   };
+}
+
+/**
+ * If `filePath` is an absolute path that stays under the container workdir after
+ * normalization, return the normalized container path; otherwise null (so it
+ * falls back to the host-workspace relative resolution). Normalizing collapses
+ * `..` segments, so `/workspace/../etc` yields `/etc` → null (rejected).
+ */
+function asContainerAbsolutePath(filePath: string, workdir: string): string | null {
+  const trimmed = filePath.trim();
+  if (!path.posix.isAbsolute(trimmed)) {
+    return null;
+  }
+  const normalized = path.posix.normalize(trimmed);
+  if (normalized === workdir || normalized.startsWith(`${workdir}/`)) {
+    return normalized;
+  }
+  return null;
+}
+
+type SandboxMount = { container: string; host: string };
+
+/**
+ * Reverse-map a container path back to its host path via the container's mount
+ * table (main workspace mount + configured binds), longest container-prefix
+ * wins. Used only to populate `hostPath` for the host-side image/patch tools;
+ * returns null when no mount covers the path.
+ */
+function mapContainerPathToHost(containerPath: string, sandbox: SandboxContext): string | null {
+  let best: SandboxMount | null = null;
+  for (const mount of collectSandboxMounts(sandbox)) {
+    if (containerPath === mount.container || containerPath.startsWith(`${mount.container}/`)) {
+      if (!best || mount.container.length > best.container.length) {
+        best = mount;
+      }
+    }
+  }
+  if (!best) {
+    return null;
+  }
+  const relative = path.posix.relative(best.container, containerPath);
+  return relative ? path.join(best.host, relative) : best.host;
+}
+
+function collectSandboxMounts(sandbox: SandboxContext): SandboxMount[] {
+  const mounts: SandboxMount[] = [
+    { container: sandbox.containerWorkdir, host: sandbox.workspaceDir },
+  ];
+  for (const bind of sandbox.docker.binds ?? []) {
+    const parsed = parseSandboxBind(bind);
+    if (parsed) {
+      mounts.push(parsed);
+    }
+  }
+  return mounts;
+}
+
+/** Parse a docker `-v` bind string `HOST:CONTAINER[:OPTIONS]` into host/container. */
+function parseSandboxBind(bind: string): SandboxMount | null {
+  const parts = bind.split(":");
+  if (parts.length < 2) {
+    return null;
+  }
+  const [host, container] = parts;
+  if (!host || !container) {
+    return null;
+  }
+  return { host, container };
 }
 
 function coerceStatType(typeRaw?: string): "file" | "directory" | "other" {
