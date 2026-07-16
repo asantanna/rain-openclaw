@@ -3,23 +3,54 @@ import path from "node:path";
 import type { SandboxFsBridge, SandboxFsStat, SandboxResolvedPath } from "../sandbox/fs-bridge.js";
 import { resolveSandboxPath } from "../sandbox-paths.js";
 
-export function createHostSandboxFsBridge(rootDir: string): SandboxFsBridge {
+/** An extra Docker mount for the test bridge: a container subpath backed by a
+ *  host dir outside the workspace root (e.g. `/workspace/tmp_host` → `/tmp`). */
+export type HostSandboxMount = { container: string; host: string };
+
+export function createHostSandboxFsBridge(
+  rootDir: string,
+  opts?: { mounts?: HostSandboxMount[] },
+): SandboxFsBridge {
   const root = path.resolve(rootDir);
+  const mounts = (opts?.mounts ?? []).map((m) => ({
+    container: path.posix.normalize(m.container),
+    host: path.resolve(m.host),
+  }));
 
   const workdir = "/workspace";
+
+  const mapContainerToHost = (containerPath: string): string => {
+    // Longest matching mount wins (mirrors the real bridge's reverse-map);
+    // otherwise the path lives under the main workspace mount → host root.
+    let best: HostSandboxMount | null = null;
+    for (const m of mounts) {
+      if (containerPath === m.container || containerPath.startsWith(`${m.container}/`)) {
+        if (!best || m.container.length > best.container.length) {
+          best = m;
+        }
+      }
+    }
+    if (best) {
+      const rel = path.posix.relative(best.container, containerPath);
+      return rel ? path.join(best.host, rel) : best.host;
+    }
+    const rel = path.posix.relative(workdir, containerPath);
+    return rel ? path.join(root, rel) : root;
+  };
 
   const resolvePath = (filePath: string, cwd?: string): SandboxResolvedPath => {
     // Mirror the real fs bridge: a container-absolute path under the workdir
     // (e.g. /workspace/tmp_host/foo) resolves directly as a container path,
-    // mapped back onto the (single-mount) host root. Everything else goes
-    // through the host-relative check.
+    // reverse-mapped through the mount table. Everything else goes through the
+    // host-relative check (which rejects host paths on the extra mounts, just
+    // like the real bridge).
     const trimmed = filePath.trim();
     if (path.posix.isAbsolute(trimmed)) {
       const normalized = path.posix.normalize(trimmed);
       if (normalized === workdir || normalized.startsWith(`${workdir}/`)) {
         const relativePath = normalized === workdir ? "" : path.posix.relative(workdir, normalized);
         return {
-          hostPath: relativePath ? path.join(root, relativePath) : root,
+          hostPath: mapContainerToHost(normalized),
           relativePath,
           containerPath: normalized,
         };

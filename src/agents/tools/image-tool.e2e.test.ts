@@ -291,6 +291,67 @@ describe("image tool implicit imageModel config", () => {
       await fs.rm(tmpBase, { recursive: true, force: true });
     }
   });
+
+  it("loads an image from an extra mount via its container path", async () => {
+    // Rain's exact bug: image() on a file that lives on an extra mount
+    // (/workspace/tmp_host/... backed by a host dir OUTSIDE the workspace).
+    // image() used to reverse-map to the host path (e.g. /tmp/mystery.png) and
+    // read THAT back through the bridge, which rejects host paths on extra
+    // mounts — so it failed where read() worked. It must read via the container
+    // path instead. The mount-backed bridge reproduces the rejection faithfully.
+    const sandboxRoot = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-img-ws-"));
+    const mountHost = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-img-mount-"));
+    const agentDir = path.join(sandboxRoot, "agent");
+    await fs.mkdir(agentDir, { recursive: true });
+    try {
+      const pngB64 =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/woAAn8B9FD5fHAAAAAASUVORK5CYII=";
+      await fs.writeFile(path.join(mountHost, "mystery.png"), Buffer.from(pngB64, "base64"));
+
+      const fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        headers: new Headers(),
+        json: async () => ({
+          content: "ok",
+          base_resp: { status_code: 0, status_msg: "" },
+        }),
+      });
+      // @ts-expect-error partial global
+      global.fetch = fetch;
+      vi.stubEnv("MINIMAX_API_KEY", "minimax-test");
+
+      const cfg: OpenClawConfig = {
+        agents: {
+          defaults: {
+            model: { primary: "minimax/MiniMax-M2.1" },
+            imageModel: { primary: "minimax/MiniMax-VL-01" },
+          },
+        },
+      };
+      const bridge = createHostSandboxFsBridge(sandboxRoot, {
+        mounts: [{ container: "/workspace/tmp_host", host: mountHost }],
+      });
+      const tool = createImageTool({
+        config: cfg,
+        agentDir,
+        sandbox: { root: sandboxRoot, bridge },
+      });
+      if (!tool) {
+        throw new Error("expected image tool");
+      }
+
+      await tool.execute("t1", {
+        prompt: "Describe.",
+        image: "/workspace/tmp_host/mystery.png",
+      });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      await fs.rm(sandboxRoot, { recursive: true, force: true });
+      await fs.rm(mountHost, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("image tool data URL support", () => {

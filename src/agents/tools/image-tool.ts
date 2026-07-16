@@ -1,6 +1,5 @@
 import { type Api, type Context, complete, type Model } from "@mariozechner/pi-ai";
 import { Type } from "@sinclair/typebox";
-import os from "node:os";
 import path from "node:path";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { SandboxFsBridge } from "../sandbox/fs-bridge.js";
@@ -208,12 +207,18 @@ async function resolveSandboxedImagePath(params: {
 }): Promise<{ resolved: string; rewrittenFrom?: string }> {
   const normalize = (p: string) => (p.startsWith("file://") ? p.slice("file://".length) : p);
   const filePath = normalize(params.imagePath);
+  // Return the CONTAINER path, not the host path. In sandbox mode the bytes are
+  // read back through the bridge (`bridge.readFile`), which understands container
+  // `/workspace/...` paths — including the extra mounts (tmp_host, shared, …).
+  // A host path would round-trip incorrectly: the bridge re-resolves it against
+  // the workspace root and rejects anything on an extra mount (e.g. /tmp/foo.jpg
+  // for /workspace/tmp_host/foo.jpg). This mirrors how read() reaches the mounts.
   try {
     const resolved = params.sandbox.bridge.resolvePath({
       filePath,
       cwd: params.sandbox.root,
     });
-    return { resolved: resolved.hostPath };
+    return { resolved: resolved.containerPath };
   } catch (err) {
     const name = path.basename(filePath);
     const candidateRel = path.join("media", "inbound", name);
@@ -232,7 +237,7 @@ async function resolveSandboxedImagePath(params: {
       filePath: candidateRel,
       cwd: params.sandbox.root,
     });
-    return { resolved: out.hostPath, rewrittenFrom: filePath };
+    return { resolved: out.containerPath, rewrittenFrom: filePath };
   }
 }
 
@@ -463,19 +468,12 @@ export function createImageTool(options?: {
         : sandboxConfig
           ? await loadWebMedia(resolvedPath ?? resolvedImage, {
               maxBytes,
-              // The resolved path is a HOST path under the sandbox workspace,
-              // but the default local roots don't include that dir (only tmp,
-              // ~/.openclaw/media, ~/.openclaw/agents) — so without this the
-              // allow-check rejects every workspace image before it's read.
-              // Mirror the native auto-embed path (run/images.ts) and add the
-              // sandbox root. Reads still go through the bridge (the container
-              // mount table is the real boundary).
-              localRoots: [
-                os.tmpdir(),
-                path.join(os.homedir(), ".openclaw", "media"),
-                path.join(os.homedir(), ".openclaw", "agents"),
-                sandboxConfig.root,
-              ],
+              // In sandbox mode the path is a CONTAINER path and the bytes are
+              // read via the bridge (below), whose container mount table IS the
+              // access boundary — exactly like read(). The host-side allow-check
+              // can't validate a container path (it isn't a real host path), so
+              // defer to the bridge. Escapes are still rejected there.
+              localRoots: "any",
               readFile: (filePath) =>
                 sandboxConfig.bridge.readFile({ filePath, cwd: sandboxConfig.root }),
             })
