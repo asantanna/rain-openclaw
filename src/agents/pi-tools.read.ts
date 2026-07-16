@@ -1,7 +1,7 @@
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import { createEditTool, createReadTool, createWriteTool } from "@mariozechner/pi-coding-agent";
 import type { AnyAgentTool } from "./pi-tools.types.js";
-import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
+import type { SandboxFsBridge, SandboxResolvedPath } from "./sandbox/fs-bridge.js";
 import { detectMime } from "../media/mime.js";
 import { assertSandboxPath } from "./sandbox-paths.js";
 import { sanitizeToolResultImages } from "./tool-images.js";
@@ -252,7 +252,11 @@ export function wrapToolParamNormalization(
   };
 }
 
-function wrapSandboxPathGuard(tool: AnyAgentTool, root: string): AnyAgentTool {
+function wrapSandboxPathGuard(
+  tool: AnyAgentTool,
+  root: string,
+  bridge: SandboxFsBridge,
+): AnyAgentTool {
   return {
     ...tool,
     execute: async (toolCallId, args, signal, onUpdate) => {
@@ -261,10 +265,32 @@ function wrapSandboxPathGuard(tool: AnyAgentTool, root: string): AnyAgentTool {
         normalized ??
         (args && typeof args === "object" ? (args as Record<string, unknown>) : undefined);
       const filePath = record?.path;
+      let effectiveArgs: unknown = normalized ?? args;
       if (typeof filePath === "string" && filePath.trim()) {
-        await assertSandboxPath({ filePath, cwd: root, root });
+        try {
+          await assertSandboxPath({ filePath, cwd: root, root });
+        } catch (err) {
+          // The host-side guard rejects container-absolute paths like
+          // `/workspace/tmp_host/foo`: they escape the *host* workspace root,
+          // even though they address the sandbox mount table and the fs bridge
+          // resolves them correctly (which is why the equivalent relative path
+          // works). Defer to the bridge — the authoritative sandbox boundary.
+          // If it accepts the path, rewrite to the workspace-relative form so
+          // the downstream read/write/edit tool resolves it under the workspace
+          // root, exactly like a relative input. If the bridge also rejects it,
+          // it is a real escape — rethrow the original error.
+          let resolved: SandboxResolvedPath;
+          try {
+            resolved = bridge.resolvePath({ filePath });
+          } catch {
+            throw err;
+          }
+          if (record) {
+            effectiveArgs = { ...record, path: resolved.relativePath || "." };
+          }
+        }
       }
-      return tool.execute(toolCallId, normalized ?? args, signal, onUpdate);
+      return tool.execute(toolCallId, effectiveArgs, signal, onUpdate);
     },
   };
 }
@@ -278,7 +304,7 @@ export function createSandboxedReadTool(params: SandboxToolParams) {
   const base = createReadTool(params.root, {
     operations: createSandboxReadOperations(params),
   }) as unknown as AnyAgentTool;
-  return wrapSandboxPathGuard(createOpenClawReadTool(base), params.root);
+  return wrapSandboxPathGuard(createOpenClawReadTool(base), params.root, params.bridge);
 }
 
 export function createSandboxedWriteTool(params: SandboxToolParams) {
@@ -288,6 +314,7 @@ export function createSandboxedWriteTool(params: SandboxToolParams) {
   return wrapSandboxPathGuard(
     wrapToolParamNormalization(base, CLAUDE_PARAM_GROUPS.write),
     params.root,
+    params.bridge,
   );
 }
 
@@ -298,6 +325,7 @@ export function createSandboxedEditTool(params: SandboxToolParams) {
   return wrapSandboxPathGuard(
     wrapToolParamNormalization(base, CLAUDE_PARAM_GROUPS.edit),
     params.root,
+    params.bridge,
   );
 }
 
