@@ -27,6 +27,17 @@ systemctl --user restart openclaw-gateway   # ASK ANDRÉ FIRST
 
 After code changes: `pnpm build && systemctl --user restart openclaw-gateway`
 
+**⚠️ Config hot-reload is NOT reliable — restart to apply, and verify.** Editing
+`openclaw.json` triggers a hot-reload, but some paths capture config at _startup_ and
+silently ignore reloads (confirmed for `session.reset` — the reload even logs "applied"
+while the running session logic keeps the old policy). The reload gives no signal that a
+setting didn't take. So for any behavior-critical config (session policy, security,
+routing): **change the file, then restart, then verify the new behavior.** Never trust
+"it hot-reloaded." Safest order when the change also needs new code (a new schema value):
+`pnpm build` → **stop** → edit `openclaw.json` → **start** — the config is in place before
+boot, so you depend on hot-reload for nothing. (An edit-then-restart works too; stop→edit→start
+just also avoids the old build's schema rejecting a value it doesn't yet know.)
+
 ## Code Conventions
 
 - **TypeScript**: ESM, strict mode. Prefer strict typing, avoid `any`.
