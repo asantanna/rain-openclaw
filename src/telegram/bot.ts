@@ -219,6 +219,25 @@ export function createTelegramBot(opts: TelegramBotOptions) {
         rawUpdateLogger.debug(`telegram update log failed: ${String(err)}`);
       }
     }
+    // Persist the durable update-offset watermark ON RECEIPT, before handling.
+    // This is what seeds shouldSkipUpdate on the next boot, so once we've received
+    // an update we never replay it across a gateway restart — even if handling is
+    // slow, queued, dropped on overflow, or interrupted by the restart itself.
+    // The alternative (recording only after next() completes, below) left updates
+    // whose handlers didn't finish unconfirmed, so Telegram re-delivered a stale
+    // backlog on the next reconnect and flooded the agent. We deliberately persist
+    // the watermark WITHOUT advancing the in-memory `lastUpdateId` here, so the
+    // current update is not skipped by its own handler; the in-memory watermark
+    // still advances in recordUpdateId() after next(). Net effect: an in-flight
+    // message may be lost on restart (acceptable — the busy-queue is already
+    // in-memory), but a stale barrage can no longer be replayed.
+    const receivedUpdateId = resolveTelegramUpdateId(ctx);
+    if (
+      typeof receivedUpdateId === "number" &&
+      (lastUpdateId === null || receivedUpdateId > lastUpdateId)
+    ) {
+      void opts.updateOffset?.onUpdateId?.(receivedUpdateId);
+    }
     await next();
     recordUpdateId(ctx);
   });
