@@ -15,6 +15,7 @@ import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { WebSocket, WebSocketServer } from "ws";
+import { isSilentReplyText } from "../../auto-reply/tokens.js";
 import { maybeRelayToGroupPeers } from "../../gateway/server-group-relay.js";
 import { buildAgentPeerSessionKey } from "../../routing/session-key.js";
 import { sendMessageTelegram } from "../../telegram/send.js";
@@ -307,10 +308,21 @@ function chunkForTelegram(text: string, max = TELEGRAM_CHUNK_CHARS): string[] {
  * with a fresh runId (human-originated, depth reset) and the maxDepth cap backs
  * it up.
  */
-async function handleToGroup(text: string, connId: number): Promise<void> {
+export async function handleToGroup(text: string, connId: number): Promise<void> {
   const trimmed = text?.trim();
   if (!trimmed) {
     clog(`conn #${connId}: toGroup ignored (empty)`);
+    return;
+  }
+  // The twin chose silence (NO_REPLY). Honor it: don't post to the group's
+  // humans (Telegram) OR relay to the sibling agents. Unlike the DM path (which
+  // returns through the outbound delivery normalizer) and the peer-relay leg
+  // (guarded in server-group-relay.ts), this Telegram leg calls sendMessage
+  // directly and so has no silent-reply guard of its own — this is it. The TUI
+  // is Pi-side, upstream of this bridge, so the twin's NO_REPLY still shows
+  // there for diagnostics; it simply stops at the group boundary.
+  if (isSilentReplyText(trimmed)) {
+    clog(`conn #${connId}: toGroup suppressed (NO_REPLY — twin chose silence)`);
     return;
   }
   clog(`conn #${connId}: toGroup → ${RAIN_TECH_GROUP_ID} len=${trimmed.length}`);
